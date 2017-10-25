@@ -4,7 +4,7 @@ LICENSE = "LGPLv3"
 SECTION = "firmware"
 
 SRC_URI = " \
-    http://ftp.nluug.nl/os/Linux/virtual/ovirt/ovirt-3.5/src/${PN}/${PN}-${PV}.tar.gz \
+    https://code.coreboot.org/p/seabios/downloads/get/${PN}-${PV}.tar.gz;name=tarball \
 "
 
 S = "${WORKDIR}/${PN}-${PV}"
