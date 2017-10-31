@@ -9,7 +9,7 @@ PR = "r3"
 
 inherit autotools-brokensep
 
-SRC_URI = "${DEBIAN_MIRROR}/main/v/vbetool/vbetool_${PV}.orig.tar.gz"
+SRC_URI = "http://ftp.debian.org/debian/pool/main/v/vbetool/vbetool_${PV}.orig.tar.gz"
 
 S = "${WORKDIR}/vbetool-${PV}"
 

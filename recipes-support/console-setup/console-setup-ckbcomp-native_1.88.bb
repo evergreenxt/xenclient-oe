@@ -7,7 +7,7 @@ RDEPENDS_${PN} = "perl-native"
 
 # Don't bother building the whole package. We only want the ckbcomp script.
 
-SRC_URI = "${DEBIAN_MIRROR}/main/c/console-setup/console-setup_${PV}.tar.gz"
+SRC_URI = "http://ftp.debian.org/debian/pool/main/c/console-setup/console-setup_${PV}.tar.gz"
 
 S = "${WORKDIR}/console-setup-${PV}"
 
