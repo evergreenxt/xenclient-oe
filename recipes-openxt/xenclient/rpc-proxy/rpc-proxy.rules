@@ -14,6 +14,8 @@ allow destination com.citrix.xenclient.db interface com.citrix.xenclient.db memb
 allow destination com.citrix.xenclient.usbdaemon if-boolean usb-control true
 
 # allow syncvms to talk to xenmgr and to access their domstore
+allow dom-type syncvm destination org.freedesktop.DBus interface org.freedesktop.DBus member Hello
+allow dom-type syncvm destination org.freedesktop.DBus interface org.freedesktop.DBus member GetNameOwner
 allow dom-type syncvm destination com.citrix.xenclient.db interface org.freedesktop.DBus.Introspectable member Introspect
 allow dom-type syncvm destination com.citrix.xenclient.xenmgr interface com.citrix.xenclient.vmdisk member attach_vhd
 allow dom-type syncvm destination com.citrix.xenclient.xenmgr interface com.citrix.xenclient.xenmgr member list_vms
