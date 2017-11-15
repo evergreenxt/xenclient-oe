@@ -2,7 +2,7 @@ PR .= ".1"
 
 DEPENDS += "libselinux"
 DEPENDS_${PN} += "libv4v xen"
-RDEPENDS_${PN} += "libselinux"
+RDEPENDS_${PN} += "libselinux linux-v4v-headers-native"
 
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}-${PV}:"
 
