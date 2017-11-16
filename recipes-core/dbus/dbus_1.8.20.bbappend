@@ -1,8 +1,10 @@
 PR .= ".1"
 
 DEPENDS += "libselinux"
-DEPENDS_${PN} += "libv4v xen"
-RDEPENDS_${PN} += "libselinux linux-v4v-headers-native"
+DEPENDS_xenclient-syncvm += "libv4v"
+RDEPENDS_${PN} += "libselinux"
+
+EXTRA_OECONF_xenclient-syncvm += "--enable-v4v"
 
 FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}-${PV}:"
 
