@@ -324,7 +324,7 @@ diff -urB --new-file a/src/hw/tpm_drivers.c b/src/hw/tpm_drivers.c
 --- a/src/hw/tpm_drivers.c	1969-12-31 19:00:00.000000000 -0500
 +++ b/src/hw/tpm_drivers.c	2017-12-12 13:04:21.527014313 -0500
 @@ -0,0 +1,273 @@
-+i// Implementation of a TPM driver for the TPM TIS interface
++// Implementation of a TPM driver for the TPM TIS interface
 +//
 +// Copyright (C) 2006-2011 IBM Corporation
 +//
