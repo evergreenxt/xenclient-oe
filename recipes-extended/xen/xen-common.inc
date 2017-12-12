@@ -122,6 +122,7 @@ SRC_URI_append = " \
     file://xsa242-4.9.patch \
     file://xsa243.patch \
     file://xsa244.patch \
+    file://xen-tpm-passthrough.patch;patch=1 \
 "
 
 COMPATIBLE_HOST = 'i686-oe-linux|(x86_64.*).*-linux|aarch64.*-linux'
