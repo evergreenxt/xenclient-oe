@@ -1,0 +1,3689 @@
+diff -urB --new-file a/Makefile b/Makefile
+--- a/Makefile	2014-05-09 21:56:32.000000000 -0400
++++ b/Makefile	2017-12-12 12:38:00.240113187 -0500
+@@ -38,11 +38,12 @@
+     hw/lsi-scsi.c hw/esp-scsi.c hw/megasas.c
+ SRC16=$(SRCBOTH) system.c disk.c font.c
+ SRC32FLAT=$(SRCBOTH) post.c memmap.c malloc.c pmm.c romfile.c optionroms.c \
+-    boot.c bootsplash.c jpeg.c bmp.c \
++    boot.c bootsplash.c jpeg.c bmp.c tcgbios.c sha1.c \
+     hw/ahci.c hw/pvscsi.c hw/usb-xhci.c hw/usb-hub.c \
+     fw/coreboot.c fw/lzmadecode.c fw/csm.c fw/biostables.c \
+     fw/paravirt.c fw/shadow.c fw/pciinit.c fw/smm.c fw/mtrr.c fw/xen.c \
+-    fw/acpi.c fw/mptable.c fw/pirtable.c fw/smbios.c fw/romfile_loader.c
++    fw/acpi.c fw/mptable.c fw/pirtable.c fw/smbios.c fw/romfile_loader.c \
++    hw/tpm_drivers.c
+ SRC32SEG=string.c output.c pcibios.c apm.c stacks.c hw/pci.c hw/serialio.c
+ DIRS=src src/hw src/fw vgasrc
+ 
+@@ -241,6 +242,13 @@
+ iasl-option=$(shell if test -z "`$(1) $(2) 2>&1 > /dev/null`" \
+     ; then echo "$(2)"; else echo "$(3)"; fi ;)
+ 
++src/fw/acpi-tpm-ssdt.hex: src/fw/acpi-tpm-ssdt.dsl
++	@echo "Compiling TPM SSDT"
++	$(Q)cpp -P $< > $(OUT)$*.dsl.i
++	$(Q)iasl -tc -p $(OUT)$* $(OUT)$*.dsl.i
++	$(Q)cp $(OUT)$*.hex $@
++	$(Q)sed -i 's/AmlCode/AmlCode_TPM/' $@
++
+ $(OUT)%.hex: %.dsl ./scripts/acpi_extract_preprocess.py ./scripts/acpi_extract.py
+ 	@echo "  Compiling IASL $@"
+ 	$(Q)$(CPP) $(CPPFLAGS) $< -o $(OUT)$*.dsl.i.orig
+diff -urB --new-file a/src/boot.c b/src/boot.c
+--- a/src/boot.c	2014-05-09 21:56:32.000000000 -0400
++++ b/src/boot.c	2017-12-12 12:48:35.036480191 -0500
+@@ -19,6 +19,7 @@
+ #include "std/disk.h" // struct mbr_s
+ #include "string.h" // memset
+ #include "util.h" // irqtimer_calc
++#include "tcgbios.h" // tcpa_*
+ 
+ 
+ /****************************************************************
+@@ -426,7 +427,7 @@
+ }
+ 
+ // Read a keystroke - waiting up to 'msec' milliseconds.
+-static int
++int
+ get_keystroke(int msec)
+ {
+     u32 end = irqtimer_calc(msec);
+@@ -460,13 +461,22 @@
+ 
+     char *bootmsg = romfile_loadfile("etc/boot-menu-message", NULL);
+     int menukey = romfile_loadint("etc/boot-menu-key", 0x86);
++    int menukey_tpm = romfile_loadint("etc/boot-menu-key-tpm", 0x85);
++again:
+     printf("%s", bootmsg ?: "\nPress F12 for boot menu.\n\n");
+-    free(bootmsg);
++    if (detected_tpm())
++        printf("Press F11 to TPM menu.\n");
++    printf("\n");
+ 
+     u32 menutime = romfile_loadint("etc/boot-menu-wait", DEFAULT_BOOTMENU_WAIT);
+     enable_bootsplash();
+     int scan_code = get_keystroke(menutime);
+     disable_bootsplash();
++    if (detected_tpm() && scan_code == menukey_tpm) {
++         tcpa_menu();
++         goto again;
++    }
++    free(bootmsg);
+     if (scan_code != menukey)
+         return;
+ 
+@@ -475,6 +485,7 @@
+ 
+     printf("Select boot device:\n\n");
+     wait_threads();
++    tcpa_leave_bios();
+ 
+     // Show menu items
+     int maxmenu = 0;
+@@ -622,6 +633,10 @@
+         }
+     }
+ 
++    tcpa_add_bootdevice(0, bootdrv);
++    /* specs: 8.2.3 steps 4 and 5 */
++    tcpa_ipl(IPL_BCV, MAKE_FLATPTR(bootseg, 0), 512);
++
+     /* Canonicalize bootseg:bootip */
+     u16 bootip = (bootseg & 0x0fff) << 4;
+     bootseg &= 0xf000;
+@@ -645,6 +660,11 @@
+ 
+     u8 bootdrv = CDEmu.emulated_extdrive;
+     u16 bootseg = CDEmu.load_segment;
++
++    tcpa_add_bootdevice(1, bootdrv);
++    /* specs: 8.2.5.6 */
++    tcpa_ipl(IPL_EL_TORITO_1, MAKE_FLATPTR(bootseg, 0), 512);
++
+     /* Canonicalize bootseg:bootip */
+     u16 bootip = (bootseg & 0x0fff) << 4;
+     bootseg &= 0xf000;
+@@ -730,6 +750,8 @@
+         break;
+     }
+ 
++    tcpa_returned_via_int18h();
++
+     // Boot failed: invoke the boot recovery function
+     struct bregs br;
+     memset(&br, 0, sizeof(br));
+diff -urB --new-file a/src/cdrom.c b/src/cdrom.c
+--- a/src/cdrom.c	2014-02-06 11:18:16.000000000 -0500
++++ b/src/cdrom.c	2017-12-12 12:50:40.397346457 -0500
+@@ -15,6 +15,7 @@
+ #include "std/disk.h" // DISK_RET_SUCCESS
+ #include "string.h" // memset
+ #include "util.h" // cdrom_prepboot
++#include "tcgbios.h" // tcpa_*
+ 
+ // Locks for removable devices
+ u8 CDRom_locks[BUILD_MAX_EXTDRIVE] VARLOW;
+@@ -226,6 +227,11 @@
+     if (buffer[0x20] != 0x88)
+         return 11; // Bootable
+ 
++    /* specs: 8.2.3 step 5 and 8.2.5.6, measure El Torito boot catalog */
++    /* measure 2048 bytes (one sector) */
++    tcpa_add_bootdevice(1, 0);
++    tcpa_ipl(IPL_EL_TORITO_2, MAKE_FLATPTR(GET_SEG(SS), buffer), 2048);
++
+     u8 media = buffer[0x21];
+     CDEmu.media = media;
+ 
+@@ -251,6 +257,10 @@
+     if (ret)
+         return 12;
+ 
++    /* specs: 8.2.3 step 4 and 8.2.5.6, measure El Torito boot image */
++    /* measure 1st 512 bytes */
++    tcpa_ipl(IPL_EL_TORITO_1, MAKE_FLATPTR(boot_segment, 0), 512);
++
+     if (media == 0) {
+         // No emulation requested - return success.
+         CDEmu.emulated_extdrive = EXTSTART_CD + cdid;
+diff -urB --new-file a/src/clock.c b/src/clock.c
+--- a/src/clock.c	2014-02-06 11:18:16.000000000 -0500
++++ b/src/clock.c	2017-12-12 12:52:29.558103965 -0500
+@@ -14,6 +14,7 @@
+ #include "stacks.h" // yield
+ #include "string.h" // memset
+ #include "util.h" // clock_setup
++#include "tcgbios.h" // _cfunc32flat_tcpa_interrupt_handler32
+ 
+ 
+ /****************************************************************
+@@ -239,6 +240,16 @@
+     set_success(regs);
+ }
+ 
++static void
++handle_1abb(struct bregs *regs)
++{
++    if (!CONFIG_TCGBIOS)
++        return;
++
++    dprintf(DEBUG_tcg, "16: Calling tcpa_interrupt_handler\n");
++    call32(_cfunc32flat_tcpa_interrupt_handler32, (u32)regs, 0);
++}
++
+ // Unsupported
+ static void
+ handle_1aXX(struct bregs *regs)
+@@ -260,6 +271,7 @@
+     case 0x05: handle_1a05(regs); break;
+     case 0x06: handle_1a06(regs); break;
+     case 0x07: handle_1a07(regs); break;
++    case 0xbb: handle_1abb(regs); break;
+     default:   handle_1aXX(regs); break;
+     }
+ }
+diff -urB --new-file a/src/config.h b/src/config.h
+--- a/src/config.h	2014-05-09 21:56:32.000000000 -0400
++++ b/src/config.h	2017-12-12 12:53:55.946695948 -0500
+@@ -103,5 +103,6 @@
+ #define DEBUG_unimplemented 2
+ #define DEBUG_invalid 3
+ #define DEBUG_thread 2
++#define DEBUG_tcg 20
+ 
+ #endif // config.h
+diff -urB --new-file a/src/fw/acpi.c b/src/fw/acpi.c
+--- a/src/fw/acpi.c	2014-05-28 08:09:15.000000000 -0400
++++ b/src/fw/acpi.c	2017-12-12 13:02:50.862380804 -0500
+@@ -20,8 +20,10 @@
+ #include "string.h" // memset
+ #include "util.h" // MaxCountCPUs
+ #include "x86.h" // readl
++#include "tcgbios.h" // detected_tpm
+ 
+ #include "src/fw/acpi-dsdt.hex"
++#include "acpi-tpm-ssdt.hex"
+ 
+ static void
+ build_header(struct acpi_table_header *h, u32 sig, int len, u8 rev)
+@@ -590,6 +592,39 @@
+     PCI_DEVICE_END,
+ };
+ 
++
++static u32 add_tpm_device(void **tpm_addr, void **tcpa_addr)
++{
++    struct tcpa_descriptor_rev2 *tcpa;
++
++    *tpm_addr = NULL;
++    *tcpa_addr = NULL;
++
++    if (detected_tpm()) {
++        u32 laml = 64 * 1024;
++        *tpm_addr = malloc_high(sizeof(AmlCode_TPM));
++
++        tcpa = malloc_high(sizeof(*tcpa) + laml);
++        if (!tcpa || !*tpm_addr) {
++            warn_noalloc();
++            return 1;
++        }
++
++        if (*tpm_addr)
++            memcpy(*tpm_addr, AmlCode_TPM, sizeof(AmlCode_TPM));
++
++        memset(tcpa, 0x0, sizeof(*tcpa) + laml);
++        u64 lasa = (u32)tcpa + sizeof(*tcpa);
++
++        tcpa->laml = laml;
++        tcpa->lasa = lasa;
++        build_header((void*)tcpa, TCPA_SIGNATURE, sizeof(*tcpa), 2);
++
++        *tcpa_addr = tcpa;
++    }
++    return 0;
++}
++
+ #define MAX_ACPI_TABLES 20
+ void
+ acpi_setup(void)
+@@ -664,6 +699,12 @@
+         build_header(dsdt, DSDT_SIGNATURE, sizeof(AmlCode), 1);
+     }
+ 
++    void *tcpa, *tpm;
++    if (add_tpm_device(&tpm, &tcpa))
++        return;
++    ACPI_INIT_TABLE(tpm);
++    ACPI_INIT_TABLE(tcpa);
++
+     // Build final rsdt table
+     struct rsdt_descriptor_rev1 *rsdt;
+     size_t rsdt_len = sizeof(*rsdt) + sizeof(u32) * tbl_idx;
+diff -urB --new-file a/src/fw/acpi-tpm-ssdt.dsl b/src/fw/acpi-tpm-ssdt.dsl
+--- a/src/fw/acpi-tpm-ssdt.dsl	1969-12-31 19:00:00.000000000 -0500
++++ b/src/fw/acpi-tpm-ssdt.dsl	2017-12-12 12:55:13.595221830 -0500
+@@ -0,0 +1,24 @@
++DefinitionBlock (
++    "acpi-tpm-ssdt.aml",// Output Filename
++    "SSDT",             // Signature
++    0x01,               // SSDT Compliance Revision
++    "BXPC",             // OEMID
++    "BXSSDT",           // TABLE ID
++    0x1                 // OEM Revision
++    )
++{
++    Scope(\_SB) {
++        /* TPM with emulated TPM TIS interface */
++        Device (TPM) {
++            Name (_HID, EisaID ("PNP0C31"))
++            Name (_CRS, ResourceTemplate ()
++            {
++                Memory32Fixed (ReadWrite, 0xFED40000, 0x00005000)
++                //IRQNoFlags () {5}
++            })
++            Method (_STA, 0, NotSerialized) {
++                Return (0x0F)
++            }
++        }
++    }
++}
+diff -urB --new-file a/src/fw/acpi-tpm-ssdt.hex b/src/fw/acpi-tpm-ssdt.hex
+--- a/src/fw/acpi-tpm-ssdt.hex	1969-12-31 19:00:00.000000000 -0500
++++ b/src/fw/acpi-tpm-ssdt.hex	2017-12-12 12:55:46.255447807 -0500
+@@ -0,0 +1,27 @@
++/*
++ *
++ * Intel ACPI Component Architecture
++ * ASL Optimizing Compiler version 20101013-64 [Nov 21 2010]
++ * Copyright (c) 2000 - 2010 Intel Corporation
++ *
++ * Compilation of "out/.dsl.i" - Mon Jan 30 16:03:18 2012
++ *
++ * C source code output
++ * AML code block contains 0x5D bytes
++ *
++ */
++unsigned char AmlCode_TPM[] =
++{
++    0x53,0x53,0x44,0x54,0x5D,0x00,0x00,0x00,  /* 00000000    "SSDT]..." */
++    0x01,0x15,0x42,0x58,0x50,0x43,0x00,0x00,  /* 00000008    "..BXPC.." */
++    0x42,0x58,0x53,0x53,0x44,0x54,0x00,0x00,  /* 00000010    "BXSSDT.." */
++    0x01,0x00,0x00,0x00,0x49,0x4E,0x54,0x4C,  /* 00000018    "....INTL" */
++    0x13,0x10,0x10,0x20,0x10,0x38,0x5C,0x5F,  /* 00000020    "... .8\_" */
++    0x53,0x42,0x5F,0x5B,0x82,0x30,0x54,0x50,  /* 00000028    "SB_[.0TP" */
++    0x4D,0x5F,0x08,0x5F,0x48,0x49,0x44,0x0C,  /* 00000030    "M_._HID." */
++    0x41,0xD0,0x0C,0x31,0x08,0x5F,0x43,0x52,  /* 00000038    "A..1._CR" */
++    0x53,0x11,0x11,0x0A,0x0E,0x86,0x09,0x00,  /* 00000040    "S......." */
++    0x01,0x00,0x00,0xD4,0xFE,0x00,0x50,0x00,  /* 00000048    "......P." */
++    0x00,0x79,0x00,0x14,0x09,0x5F,0x53,0x54,  /* 00000050    ".y..._ST" */
++    0x41,0x00,0xA4,0x0A,0x0F                  /* 00000058    "A...."    */
++};
+diff -urB --new-file a/src/hw/tpm_drivers.c b/src/hw/tpm_drivers.c
+--- a/src/hw/tpm_drivers.c	1969-12-31 19:00:00.000000000 -0500
++++ b/src/hw/tpm_drivers.c	2017-12-12 13:04:21.527014313 -0500
+@@ -0,0 +1,273 @@
++// Implementation of a TPM driver for the TPM TIS interface
++//
++// Copyright (C) 2006-2011 IBM Corporation
++//
++// Authors:
++//     Stefan Berger <stefanb at linux.vnet.ibm.com>
++//
++// This file may be distributed under the terms of the GNU LGPLv3 license.
++
++#if CONFIG_TCGBIOS == 1
++
++#include "config.h" // CONFIG_TPM_TIS_SHA1THRESHOLD
++#include "string.h" // memcpy
++#include "util.h" // msleep
++#include "x86.h" // readl
++#include "hw/tpm_drivers.h" // struct tpm_driver
++#include "tcgbios.h" // TCG_*
++
++static const u32 tis_default_timeouts[4] = {
++    TIS_DEFAULT_TIMEOUT_A,
++    TIS_DEFAULT_TIMEOUT_B,
++    TIS_DEFAULT_TIMEOUT_C,
++    TIS_DEFAULT_TIMEOUT_D,
++};
++
++static const u32 tpm_default_durations[3] = {
++    TPM_DEFAULT_DURATION_SHORT,
++    TPM_DEFAULT_DURATION_MEDIUM,
++    TPM_DEFAULT_DURATION_LONG,
++};
++
++/* determined values */
++static u32 tpm_default_dur[3];
++static u32 tpm_default_to[4];
++
++
++/* if device is not there, return '0', '1' otherwise */
++static u32 tis_probe(void)
++{
++    u32 rc = 0;
++    u32 didvid = readl(TIS_REG(0, TIS_REG_DID_VID));
++
++    if ((didvid != 0) && (didvid != 0xffffffff))
++        rc = 1;
++
++    return rc;
++}
++
++static u32 tis_init(void)
++{
++    writeb(TIS_REG(0, TIS_REG_INT_ENABLE), 0);
++
++    if (tpm_drivers[TIS_DRIVER_IDX].durations == NULL) {
++        u32 *durations = tpm_default_dur;
++        memcpy(durations, tpm_default_durations,
++               sizeof(tpm_default_durations));
++        tpm_drivers[TIS_DRIVER_IDX].durations = durations;
++    }
++
++    if (tpm_drivers[TIS_DRIVER_IDX].timeouts == NULL) {
++        u32 *timeouts = tpm_default_to;
++        memcpy(timeouts, tis_default_timeouts,
++               sizeof(tis_default_timeouts));
++        tpm_drivers[TIS_DRIVER_IDX].timeouts = timeouts;
++    }
++
++    return 1;
++}
++
++
++static void set_timeouts(u32 timeouts[4], u32 durations[3])
++{
++    u32 *tos = tpm_drivers[TIS_DRIVER_IDX].timeouts;
++    u32 *dus = tpm_drivers[TIS_DRIVER_IDX].durations;
++
++    if (tos && tos != tis_default_timeouts && timeouts)
++        memcpy(tos, timeouts, 4 * sizeof(u32));
++    if (dus && dus != tpm_default_durations && durations)
++        memcpy(dus, durations, 3 * sizeof(u32));
++}
++
++
++static u32 tis_wait_sts(u8 locty, u32 time, u8 mask, u8 expect)
++{
++    u32 rc = 1;
++
++    while (time > 0) {
++        u8 sts = readb(TIS_REG(locty, TIS_REG_STS));
++        if ((sts & mask) == expect) {
++            rc = 0;
++            break;
++        }
++        msleep(1);
++        time--;
++    }
++    return rc;
++}
++
++static u32 tis_activate(u8 locty)
++{
++    u32 rc = 0;
++    u8 acc;
++    int l;
++    u32 timeout_a = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_A];
++
++    if (!(readb(TIS_REG(locty, TIS_REG_ACCESS)) &
++          TIS_ACCESS_ACTIVE_LOCALITY)) {
++        /* release locality in use top-downwards */
++        for (l = 4; l >= 0; l--)
++            writeb(TIS_REG(l, TIS_REG_ACCESS),
++                   TIS_ACCESS_ACTIVE_LOCALITY);
++    }
++
++    /* request access to locality */
++    writeb(TIS_REG(locty, TIS_REG_ACCESS), TIS_ACCESS_REQUEST_USE);
++
++    acc = readb(TIS_REG(locty, TIS_REG_ACCESS));
++    if ((acc & TIS_ACCESS_ACTIVE_LOCALITY)) {
++        writeb(TIS_REG(locty, TIS_REG_STS), TIS_STS_COMMAND_READY);
++        rc = tis_wait_sts(locty, timeout_a,
++                          TIS_STS_COMMAND_READY, TIS_STS_COMMAND_READY);
++    }
++
++    return rc;
++}
++
++static u32 tis_find_active_locality(void)
++{
++    u8 locty;
++
++    for (locty = 0; locty <= 4; locty++) {
++        if ((readb(TIS_REG(locty, TIS_REG_ACCESS)) &
++             TIS_ACCESS_ACTIVE_LOCALITY))
++            return locty;
++    }
++
++    tis_activate(0);
++
++    return 0;
++}
++
++static u32 tis_ready(void)
++{
++    u32 rc = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout_b = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_B];
++
++    writeb(TIS_REG(locty, TIS_REG_STS), TIS_STS_COMMAND_READY);
++    rc = tis_wait_sts(locty, timeout_b,
++                      TIS_STS_COMMAND_READY, TIS_STS_COMMAND_READY);
++
++    return rc;
++}
++
++static u32 tis_senddata(const u8 *const data, u32 len)
++{
++    u32 rc = 0;
++    u32 offset = 0;
++    u32 end = 0;
++    u16 burst = 0;
++    u32 ctr = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout_d = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_D];
++
++    do {
++        while (burst == 0 && ctr < timeout_d) {
++               burst = readl(TIS_REG(locty, TIS_REG_STS)) >> 8;
++            if (burst == 0) {
++                msleep(1);
++                ctr++;
++            }
++        }
++
++        if (burst == 0) {
++            rc = TCG_RESPONSE_TIMEOUT;
++            break;
++        }
++
++        while (1) {
++            writeb(TIS_REG(locty, TIS_REG_DATA_FIFO), data[offset++]);
++            burst--;
++
++            if (burst == 0 || offset == len)
++                break;
++        }
++
++        if (offset == len)
++            end = 1;
++    } while (end == 0);
++
++    return rc;
++}
++
++static u32 tis_readresp(u8 *buffer, u32 *len)
++{
++    u32 rc = 0;
++    u32 offset = 0;
++    u32 sts;
++    u8 locty = tis_find_active_locality();
++
++    while (offset < *len) {
++        buffer[offset] = readb(TIS_REG(locty, TIS_REG_DATA_FIFO));
++        offset++;
++        sts = readb(TIS_REG(locty, TIS_REG_STS));
++        /* data left ? */
++        if ((sts & TIS_STS_DATA_AVAILABLE) == 0)
++            break;
++    }
++
++    *len = offset;
++
++    return rc;
++}
++
++
++static u32 tis_waitdatavalid(void)
++{
++    u32 rc = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout_c = tpm_drivers[TIS_DRIVER_IDX].timeouts[TIS_TIMEOUT_TYPE_C];
++
++    if (tis_wait_sts(locty, timeout_c, TIS_STS_VALID, TIS_STS_VALID) != 0)
++        rc = TCG_NO_RESPONSE;
++
++    return rc;
++}
++
++static u32 tis_waitrespready(enum tpmDurationType to_t)
++{
++    u32 rc = 0;
++    u8 locty = tis_find_active_locality();
++    u32 timeout = tpm_drivers[TIS_DRIVER_IDX].durations[to_t];
++
++    writeb(TIS_REG(locty ,TIS_REG_STS), TIS_STS_TPM_GO);
++
++    if (tis_wait_sts(locty, timeout,
++                     TIS_STS_DATA_AVAILABLE, TIS_STS_DATA_AVAILABLE) != 0)
++        rc = TCG_NO_RESPONSE;
++
++    return rc;
++}
++
++
++static void tis_version_data(u16 *did, u16 *vid, u16 *rid)
++{
++    u8 locty = tis_find_active_locality();
++
++    *did = readw(TIS_REG(locty, TIS_REG_DID_VID + 2));
++    *vid = readw(TIS_REG(locty, TIS_REG_DID_VID));
++    *rid = readw(TIS_REG(locty, TIS_REG_RID));
++}
++
++
++struct tpm_driver tpm_drivers[TPM_NUM_DRIVERS] = {
++    [TIS_DRIVER_IDX] =
++        {
++            .timeouts      = NULL,
++            .durations     = NULL,
++            .set_timeouts  = set_timeouts,
++            .probe         = tis_probe,
++            .init          = tis_init,
++            .activate      = tis_activate,
++            .ready         = tis_ready,
++            .senddata      = tis_senddata,
++            .readresp      = tis_readresp,
++            .waitdatavalid = tis_waitdatavalid,
++            .waitrespready = tis_waitrespready,
++            .sha1threshold = 100 * 1024,
++            .get_vers_data = tis_version_data,
++        },
++};
++
++#endif /* CONFIG_TCGBIOS == 1 */
+diff -urB --new-file a/src/hw/tpm_drivers.h b/src/hw/tpm_drivers.h
+--- a/src/hw/tpm_drivers.h	1969-12-31 19:00:00.000000000 -0500
++++ b/src/hw/tpm_drivers.h	2017-12-12 13:05:10.555355417 -0500
+@@ -0,0 +1,91 @@
++#ifndef TPM_DRIVERS_H
++#define TPM_DRIVERS_H
++
++#include "types.h" // u32
++
++
++enum tpmDurationType {
++    TPM_DURATION_TYPE_SHORT = 0,
++    TPM_DURATION_TYPE_MEDIUM,
++    TPM_DURATION_TYPE_LONG,
++};
++
++/* low level driver implementation */
++struct tpm_driver {
++    u32 *timeouts;
++    u32 *durations;
++    void (*set_timeouts)(u32 timeouts[4], u32 durations[3]);
++    u32 (*probe)(void);
++    u32 (*init)(void);
++    u32 (*activate)(u8 locty);
++    u32 (*ready)(void);
++    u32 (*senddata)(const u8 *const data, u32 len);
++    u32 (*readresp)(u8 *buffer, u32 *len);
++    u32 (*waitdatavalid)(void);
++    u32 (*waitrespready)(enum tpmDurationType to_t);
++    /* the TPM will be used for buffers of sizes below the sha1threshold
++       for calculating the hash */
++    u32 sha1threshold;
++    void (*get_vers_data)(u16 *did, u16 *vid, u16 *rid);
++};
++
++extern struct tpm_driver tpm_drivers[];
++
++
++#define TIS_DRIVER_IDX       0
++#define TPM_NUM_DRIVERS      1
++
++#define TPM_INVALID_DRIVER  -1
++
++/* TIS driver */
++/* address of locality 0 (TIS) */
++#define TPM_TIS_BASE_ADDRESS        0xfed40000
++
++#define TIS_REG(LOCTY, REG) \
++    (void *)(TPM_TIS_BASE_ADDRESS + (LOCTY << 12) + REG)
++
++/* hardware registers */
++#define TIS_REG_ACCESS                 0x0
++#define TIS_REG_INT_ENABLE             0x8
++#define TIS_REG_INT_VECTOR             0xc
++#define TIS_REG_INT_STATUS             0x10
++#define TIS_REG_INTF_CAPABILITY        0x14
++#define TIS_REG_STS                    0x18
++#define TIS_REG_DATA_FIFO              0x24
++#define TIS_REG_DID_VID                0xf00
++#define TIS_REG_RID                    0xf04
++
++#define TIS_STS_VALID                  (1 << 7) /* 0x80 */
++#define TIS_STS_COMMAND_READY          (1 << 6) /* 0x40 */
++#define TIS_STS_TPM_GO                 (1 << 5) /* 0x20 */
++#define TIS_STS_DATA_AVAILABLE         (1 << 4) /* 0x10 */
++#define TIS_STS_EXPECT                 (1 << 3) /* 0x08 */
++#define TIS_STS_RESPONSE_RETRY         (1 << 1) /* 0x02 */
++
++#define TIS_ACCESS_TPM_REG_VALID_STS   (1 << 7) /* 0x80 */
++#define TIS_ACCESS_ACTIVE_LOCALITY     (1 << 5) /* 0x20 */
++#define TIS_ACCESS_BEEN_SEIZED         (1 << 4) /* 0x10 */
++#define TIS_ACCESS_SEIZE               (1 << 3) /* 0x08 */
++#define TIS_ACCESS_PENDING_REQUEST     (1 << 2) /* 0x04 */
++#define TIS_ACCESS_REQUEST_USE         (1 << 1) /* 0x02 */
++#define TIS_ACCESS_TPM_ESTABLISHMENT   (1 << 0) /* 0x01 */
++
++#define SCALER 10
++
++#define TIS_DEFAULT_TIMEOUT_A          (750  * SCALER)
++#define TIS_DEFAULT_TIMEOUT_B          (2000 * SCALER)
++#define TIS_DEFAULT_TIMEOUT_C          (750  * SCALER)
++#define TIS_DEFAULT_TIMEOUT_D          (750  * SCALER)
++
++enum tisTimeoutType {
++    TIS_TIMEOUT_TYPE_A = 0,
++    TIS_TIMEOUT_TYPE_B,
++    TIS_TIMEOUT_TYPE_C,
++    TIS_TIMEOUT_TYPE_D,
++};
++
++#define TPM_DEFAULT_DURATION_SHORT     (2000  * SCALER)
++#define TPM_DEFAULT_DURATION_MEDIUM    (20000 * SCALER)
++#define TPM_DEFAULT_DURATION_LONG      (60000 * SCALER)
++
++#endif /* TPM_DRIVERS_H */
+diff -urB --new-file a/src/Kconfig b/src/Kconfig
+--- a/src/Kconfig	2014-05-09 21:56:32.000000000 -0400
++++ b/src/Kconfig	2017-12-12 12:39:37.024788886 -0500
+@@ -411,6 +411,21 @@
+             modified by programs.  However, some old DOS high memory
+             managers may require the UMB region to be read-only.
+ 
++    config TCGBIOS
++        select S3_RESUME
++        bool "TPM support and TCG BIOS extensions"
++        default y
++        help
++            Provide TPM support along with TCG BIOS extensions
++
++    config TPM_DIAGNOSTICS
++       depends on TCGBIOS
++       bool "TPM Diagnostics menu item"
++       default n
++       help
++           Add a menu item for displaying of TPM diagnostics in case
++           of certain issues with the TPM hardware.
++
+ endmenu
+ 
+ menu "BIOS Tables"
+diff -urB --new-file a/src/optionroms.c b/src/optionroms.c
+--- a/src/optionroms.c	2014-02-06 11:18:17.000000000 -0500
++++ b/src/optionroms.c	2017-12-12 13:06:10.799778262 -0500
+@@ -19,6 +19,7 @@
+ #include "std/pnpbios.h" // PNP_SIGNATURE
+ #include "string.h" // memset
+ #include "util.h" // get_pnp_offset
++#include "tcgbios.h" // tcpa_*
+ 
+ 
+ /****************************************************************
+@@ -80,6 +81,7 @@
+         if (EnforceChecksum)
+             return 0;
+     }
++    tcpa_option_rom(rom, len);
+     return 1;
+ }
+ 
+@@ -354,6 +356,8 @@
+     memset(sources, 0, sizeof(sources));
+     u32 post_vga = rom_get_last();
+ 
++    tcpa_start_option_rom_scan();
++
+     if (CONFIG_OPTIONROMS_DEPLOYED) {
+         // Option roms are already deployed on the system.
+         u32 pos = post_vga;
+diff -urB --new-file a/src/post.c b/src/post.c
+--- a/src/post.c	2014-05-09 21:56:32.000000000 -0400
++++ b/src/post.c	2017-12-12 13:07:31.916342765 -0500
+@@ -28,6 +28,7 @@
+ #include "output.h" // dprintf
+ #include "string.h" // memset
+ #include "util.h" // kbd_init
++#include "tcgbios.h" // tcpa_*
+ 
+ 
+ /****************************************************************
+@@ -195,6 +196,9 @@
+ void VISIBLE32FLAT
+ startBoot(void)
+ {
++    tcpa_calling_int19h();
++    tcpa_add_event_separators();
++
+     // Clear low-memory allocations (required by PMM spec).
+     memset((void*)BUILD_STACK_ADDR, 0, BUILD_EBDA_MINIMUM - BUILD_STACK_ADDR);
+ 
+@@ -219,6 +223,11 @@
+     if (threads_during_optionroms())
+         device_hardware_setup();
+ 
++    // Initialize tpm (after acpi tables were written)
++    tcpa_acpi_init();
++    tcpa_startup();
++    tcpa_smbios_measure();
++
+     // Run vga option rom
+     vgarom_setup();
+ 
+diff -urB --new-file a/src/resume.c b/src/resume.c
+--- a/src/resume.c	2014-05-09 21:56:32.000000000 -0400
++++ b/src/resume.c	2017-12-12 13:08:48.280873956 -0500
+@@ -16,6 +16,7 @@
+ #include "std/bda.h" // struct bios_data_area_s
+ #include "string.h" // memset
+ #include "util.h" // dma_setup
++#include "tcgbios.h" // tcpa_s3_resume
+ 
+ // Handler for post calls that look like a resume.
+ void VISIBLE16
+@@ -108,6 +109,7 @@
+     memset(&br, 0, sizeof(br));
+     dprintf(1, "Jump to resume vector (%x)\n", s3_resume_vector);
+     br.code = FLATPTR_TO_SEGOFF((void*)s3_resume_vector);
++    tcpa_s3_resume();
+     farcall16big(&br);
+ }
+ 
+diff -urB --new-file a/src/sha1.c b/src/sha1.c
+--- a/src/sha1.c	1969-12-31 19:00:00.000000000 -0500
++++ b/src/sha1.c	2017-12-12 13:09:25.037130578 -0500
+@@ -0,0 +1,145 @@
++//  Support for Calculation of SHA1 in SW
++//
++//  Copyright (C) 2006-2011 IBM Corporation
++//
++//  Authors:
++//      Stefan Berger <stefanb at linux.vnet.ibm.com>
++//
++//  See: http://www.itl.nist.gov/fipspubs/fip180-1.htm
++//       RFC3174, Wikipedia's SHA1 alogrithm description
++//
++
++#include "config.h"
++#include "byteorder.h" // cpu_to_*
++#include "sha1.h" // sha1
++#include "string.h" // memcpy
++#include "util.h" // rol, bswap_64
++
++typedef struct _sha1_ctx {
++    u32 h[5];
++} sha1_ctx;
++
++
++static void
++sha1_block(u32 *w, sha1_ctx *ctx)
++{
++    u32 i;
++    u32 a,b,c,d,e,f;
++    u32 tmp;
++    u32 idx;
++
++    static const u32 sha_ko[4] = {
++        0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6 };
++
++    /* change endianess of given data */
++    for (i = 0; i < 16; i++)
++        w[i] = be32_to_cpu(w[i]);
++
++    for (i = 16; i <= 79; i++) {
++        tmp = w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16];
++        w[i] = rol(tmp,1);
++    }
++
++    a = ctx->h[0];
++    b = ctx->h[1];
++    c = ctx->h[2];
++    d = ctx->h[3];
++    e = ctx->h[4];
++
++    for (i = 0; i <= 79; i++) {
++        if (i <= 19) {
++            f = (b & c) | ((b ^ 0xffffffff) & d);
++            idx = 0;
++        } else if (i <= 39) {
++            f = b ^ c ^ d;
++            idx = 1;
++        } else if (i <= 59) {
++            f = (b & c) | (b & d) | (c & d);
++            idx = 2;
++        } else {
++            f = b ^ c ^ d;
++            idx = 3;
++        }
++
++        tmp = rol(a, 5) +
++              f +
++              e +
++              sha_ko[idx] +
++              w[i];
++        e = d;
++        d = c;
++        c = rol(b, 30);
++        b = a;
++        a = tmp;
++    }
++
++    ctx->h[0] += a;
++    ctx->h[1] += b;
++    ctx->h[2] += c;
++    ctx->h[3] += d;
++    ctx->h[4] += e;
++}
++
++
++static void
++sha1_do(sha1_ctx *ctx, const u8 *data32, u32 length)
++{
++    u32 offset;
++    u16 num;
++    u32 bits = 0;
++    u32 w[80];
++    u64 tmp;
++
++    /* treat data in 64-byte chunks */
++    for (offset = 0; length - offset >= 64; offset += 64) {
++        memcpy(w, data32 + offset, 64);
++        sha1_block((u32 *)w, ctx);
++        bits += (64 * 8);
++    }
++
++    /* last block with less than 64 bytes */
++    num = length - offset;
++    bits += (num << 3);
++
++    memcpy(w, data32 + offset, num);
++    ((u8 *)w)[num] = 0x80;
++    if (64 - (num + 1) > 0)
++        memset( &((u8 *)w)[num + 1], 0x0, 64 - (num + 1));
++
++    if (num >= 56) {
++        /* cannot append number of bits here */
++        sha1_block((u32 *)w, ctx);
++        memset(w, 0x0, 60);
++    }
++
++    /* write number of bits to end of block */
++    tmp = bswap_64(bits);
++    memcpy(&w[14], &tmp, 8);
++
++    sha1_block(w, ctx);
++
++    /* need to switch result's endianess */
++    for (num = 0; num < 5; num++)
++        ctx->h[num] = cpu_to_be32(ctx->h[num]);
++}
++
++
++u32
++sha1(const u8 *data, u32 length, u8 *hash)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    sha1_ctx ctx = {
++        .h[0] = 0x67452301,
++        .h[1] = 0xefcdab89,
++        .h[2] = 0x98badcfe,
++        .h[3] = 0x10325476,
++        .h[4] = 0xc3d2e1f0,
++    };
++
++    sha1_do(&ctx, data, length);
++    memcpy(hash, &ctx.h[0], 20);
++
++    return 0;
++}
+diff -urB --new-file a/src/sha1.h b/src/sha1.h
+--- a/src/sha1.h	1969-12-31 19:00:00.000000000 -0500
++++ b/src/sha1.h	2017-12-12 13:09:53.489328813 -0500
+@@ -0,0 +1,8 @@
++#ifndef __SHA1_H
++#define __SHA1_H
++
++#include "types.h" // u32
++
++u32 sha1(const u8 *data, u32 length, u8 *hash);
++
++#endif // sha1.h
+diff -urB --new-file a/src/std/acpi.h b/src/std/acpi.h
+--- a/src/std/acpi.h	2014-02-06 11:18:17.000000000 -0500
++++ b/src/std/acpi.h	2017-12-12 13:10:47.353704150 -0500
+@@ -269,4 +269,24 @@
+     struct acpi_mcfg_allocation allocation[0];
+ } PACKED;
+ 
++
++struct rsdt_descriptor {
++    ACPI_TABLE_HEADER_DEF
++    u32 entry[1];
++} PACKED;
++
++#define TCPA_SIGNATURE 0x41504354
++struct tcpa_descriptor_rev2
++{
++    ACPI_TABLE_HEADER_DEF
++    u16  platform_class;
++    u32  laml;
++    u64  lasa;
++} PACKED;
++
++/* TCPA ACPI definitions */
++#define TCPA_ACPI_CLASS_CLIENT          0
++#define TCPA_ACPI_CLASS_SERVER          1
++
++
+ #endif // acpi.h
+diff -urB --new-file a/src/tcgbios.c b/src/tcgbios.c
+--- a/src/tcgbios.c	1969-12-31 19:00:00.000000000 -0500
++++ b/src/tcgbios.c	2017-12-12 13:12:12.802300934 -0500
+@@ -0,0 +1,2208 @@
++//  Implementation of the TCG BIOS extension according to the specification
++//  described in
++//  https://www.trustedcomputinggroup.org/specs/PCClient/TCG_PCClientImplementationforBIOS_1-20_1-00.pdf
++//
++//  Copyright (C) 2006-2011 IBM Corporation
++//
++//  Authors:
++//      Stefan Berger <stefanb at linux.vnet.ibm.com>
++//
++// This file may be distributed under the terms of the GNU LGPLv3 license.
++
++
++#include "config.h"
++
++#include "types.h"
++#include "byteorder.h" // cpu_to_*
++#include "hw/tpm_drivers.h" // tpm_drivers[]
++#include "farptr.h" // MAKE_FLATPTR
++#include "string.h" // checksum
++#include "tcgbios.h"// tcpa_*, prototypes
++#include "util.h" // printf, get_keystroke
++#include "output.h" // dprintf
++#include "std/acpi.h"  // RSDP_SIGNATURE, rsdt_descriptor
++#include "sha1.h" // sha1
++#include "std/smbios.h"
++#include "stacks.h" // wait_threads
++
++
++static const u8 Startup_ST_CLEAR[2] = { 0x00, TPM_ST_CLEAR };
++static const u8 Startup_ST_STATE[2] = { 0x00, TPM_ST_STATE };
++
++static const u8 PhysicalPresence_CMD_ENABLE[2]  = { 0x00, 0x20 };
++static const u8 PhysicalPresence_CMD_DISABLE[2] = { 0x01, 0x00 };
++static const u8 PhysicalPresence_PRESENT[2]     = { 0x00, 0x08 };
++static const u8 PhysicalPresence_NOT_PRESENT_LOCK[2] = { 0x00, 0x14 };
++
++static const u8 CommandFlag_FALSE[1] = { 0x00 };
++static const u8 CommandFlag_TRUE[1]  = { 0x01 };
++
++static const u8 GetCapability_Permanent_Flags[12] = {
++    0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04,
++    0x00, 0x00, 0x01, 0x08
++};
++
++static const u8 GetCapability_STClear_Flags[12] = {
++    0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04,
++    0x00, 0x00, 0x01, 0x09
++};
++
++static const u8 GetCapability_OwnerAuth[12] = {
++    0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x04,
++    0x00, 0x00, 0x01, 0x11
++};
++
++static const u8 GetCapability_Timeouts[] = {
++    0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x04,
++    0x00, 0x00, 0x01, 0x15
++};
++
++static const u8 GetCapability_Durations[] = {
++    0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x04,
++    0x00, 0x00, 0x01, 0x20
++};
++
++static u8 evt_separator[] = {0xff,0xff,0xff,0xff};
++
++
++#define RSDP_CAST(ptr)   ((struct rsdp_descriptor *)ptr)
++
++
++/* helper functions */
++
++static inline void *input_buf32(struct bregs *regs)
++{
++    return MAKE_FLATPTR(regs->es, regs->di);
++}
++
++static inline void *output_buf32(struct bregs *regs)
++{
++    return MAKE_FLATPTR(regs->ds, regs->si);
++}
++
++
++typedef struct {
++    u8            tpm_probed:1;
++    u8            tpm_found:1;
++    u8            tpm_working:1;
++    u8            if_shutdown:1;
++    u8            tpm_driver_to_use:4;
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    u32           startup_error;
++    u32           selftest_error;
++    u32           physpresence_enable_error;
++    u32           physpresence_lock_error;
++    u32           get_timeouts_error;
++    u32           get_durations_error;
++    u32           sha1_error;
++#endif
++} tcpa_state_t;
++
++
++static tcpa_state_t tcpa_state = {
++    .tpm_driver_to_use = TPM_INVALID_DRIVER,
++};
++
++typedef struct {
++    u8  op;
++} tpm_bios_cfg_t;
++
++
++/********************************************************
++  Extensions for TCG-enabled BIOS
++ *******************************************************/
++
++
++static u32
++is_tpm_present(void)
++{
++    u32 rc = 0;
++    unsigned int i;
++
++    for (i = 0; i < TPM_NUM_DRIVERS; i++) {
++        struct tpm_driver *td = &tpm_drivers[i];
++        if (td->probe() != 0) {
++            td->init();
++            tcpa_state.tpm_driver_to_use = i;
++            rc = 1;
++            break;
++        }
++    }
++
++    return rc;
++}
++
++static void
++probe_tpm(void)
++{
++    if (!tcpa_state.tpm_probed) {
++        tcpa_state.tpm_probed = 1;
++        tcpa_state.tpm_found = (is_tpm_present() != 0);
++        tcpa_state.tpm_working = 1;
++    }
++}
++
++int
++detected_tpm(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    probe_tpm();
++
++    return tcpa_state.tpm_found;
++}
++
++static int
++has_working_tpm(void)
++{
++    probe_tpm();
++
++    return tcpa_state.tpm_working;
++}
++
++static struct tcpa_descriptor_rev2 *
++find_tcpa_by_rsdp(struct rsdp_descriptor *rsdp)
++{
++    u32 ctr = 0;
++    struct tcpa_descriptor_rev2 *tcpa = NULL;
++    struct rsdt_descriptor *rsdt;
++    u32 length;
++    u16 off;
++
++    rsdt   = (struct rsdt_descriptor *)rsdp->rsdt_physical_address;
++    if (!rsdt)
++        return NULL;
++
++    length = rsdt->length;
++    off = offsetof(struct rsdt_descriptor, entry);
++
++    while ((off + sizeof(rsdt->entry[0])) <= length) {
++        /* try all pointers to structures */
++        tcpa = (struct tcpa_descriptor_rev2 *)(int)rsdt->entry[ctr];
++
++        /* valid TCPA ACPI table ? */
++        if (tcpa->signature == TCPA_SIGNATURE &&
++            checksum((u8 *)tcpa, tcpa->length) == 0)
++            break;
++
++        tcpa = NULL;
++        off += sizeof(rsdt->entry[0]);
++        ctr++;
++    }
++
++    return tcpa;
++}
++
++
++static struct tcpa_descriptor_rev2 *
++find_tcpa_table(void)
++{
++    struct tcpa_descriptor_rev2 *tcpa = NULL;
++    struct rsdp_descriptor *rsdp = RsdpAddr;
++
++    if (rsdp)
++        tcpa = find_tcpa_by_rsdp(rsdp);
++    else
++        tcpa_state.if_shutdown = 1;
++
++    if (!rsdp)
++        dprintf(DEBUG_tcg,
++                "TCGBIOS: RSDP was NOT found! -- Disabling interface.\n");
++    else if (!tcpa)
++        dprintf(DEBUG_tcg, "TCGBIOS: TCPA ACPI was NOT found!\n");
++
++    return tcpa;
++}
++
++
++static u8 *
++get_lasa_base_ptr(u32 *laml)
++{
++    u8 *lasa = 0;
++    struct tcpa_descriptor_rev2 *tcpa = find_tcpa_table();
++
++    if (tcpa) {
++        lasa = (u8 *)(long)tcpa->lasa;
++        if (laml)
++            *laml = tcpa->laml;
++    }
++
++    return lasa;
++}
++
++
++/* clear the ACPI log */
++static void
++reset_acpi_log(void)
++{
++    u32 laml;
++    u8 *lasa = get_lasa_base_ptr(&laml);
++
++    if (lasa)
++        memset(lasa, 0x0, laml);
++}
++
++
++/*
++   initialize the TCPA ACPI subsystem; find the ACPI tables and determine
++   where the TCPA table is.
++ */
++void
++tcpa_acpi_init(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return;
++
++    tcpa_state.if_shutdown = 0;
++    tcpa_state.tpm_probed = 0;
++    tcpa_state.tpm_found = 0;
++    tcpa_state.tpm_working = 0;
++
++    if (!has_working_tpm()) {
++        tcpa_state.if_shutdown = 1;
++        return;
++    }
++
++    reset_acpi_log();
++}
++
++
++static u32
++transmit(u8 locty, const struct iovec iovec[],
++         u8 *respbuffer, u32 *respbufferlen,
++         enum tpmDurationType to_t)
++{
++    u32 rc = 0;
++    u32 irc;
++    struct tpm_driver *td;
++    unsigned int i;
++
++    if (tcpa_state.tpm_driver_to_use == TPM_INVALID_DRIVER)
++        return TCG_FATAL_COM_ERROR;
++
++    td = &tpm_drivers[tcpa_state.tpm_driver_to_use];
++
++    irc = td->activate(locty);
++    if (irc != 0) {
++        /* tpm could not be activated */
++        return TCG_FATAL_COM_ERROR;
++    }
++
++    for (i = 0; iovec[i].length; i++) {
++        irc = td->senddata(iovec[i].data,
++                           iovec[i].length);
++        if (irc != 0)
++            return TCG_FATAL_COM_ERROR;
++    }
++
++    irc = td->waitdatavalid();
++    if (irc != 0)
++        return TCG_FATAL_COM_ERROR;
++
++    irc = td->waitrespready(to_t);
++    if (irc != 0)
++        return TCG_FATAL_COM_ERROR;
++
++    irc = td->readresp(respbuffer,
++                       respbufferlen);
++    if (irc != 0)
++        return TCG_FATAL_COM_ERROR;
++
++    td->ready();
++
++    return rc;
++}
++
++
++/*
++ * Send a TPM command with the given ordinal. Append the given buffer
++ * containing all data in network byte order to the command (this is
++ * the custom part per command) and expect a response of the given size.
++ * If a buffer is provided, the response will be copied into it.
++ */
++static u32
++build_and_send_cmd_od(u32 ordinal, const u8 *append, u32 append_size,
++                      u8 *resbuffer, u32 return_size, u32 *returnCode,
++                      const u8 *otherdata, u32 otherdata_size,
++                      enum tpmDurationType to_t)
++{
++#define MAX_APPEND_SIZE   12
++#define MAX_RESPONSE_SIZE sizeof(struct tpm_res_getcap_perm_flags)
++    u32 rc;
++    u8 ibuffer[TPM_REQ_HEADER_SIZE + MAX_APPEND_SIZE];
++    u8 obuffer[MAX_RESPONSE_SIZE];
++    struct tpm_req_header *trqh = (struct tpm_req_header *)ibuffer;
++    struct tpm_rsp_header *trsh = (struct tpm_rsp_header *)obuffer;
++    u8 locty = 0;
++    struct iovec iovec[3];
++    u32 obuffer_len = sizeof(obuffer);
++    u32 idx = 1;
++
++    if (append_size > MAX_APPEND_SIZE ||
++        return_size > MAX_RESPONSE_SIZE) {
++        dprintf(DEBUG_tcg, "TCGBIOS: size of requested buffers too big.");
++        return TCG_FIRMWARE_ERROR;
++    }
++
++    iovec[0].data   = trqh;
++    iovec[0].length = TPM_REQ_HEADER_SIZE + append_size;
++
++    if (otherdata) {
++        iovec[1].data   = (void *)otherdata;
++        iovec[1].length = otherdata_size;
++        idx = 2;
++    }
++
++    iovec[idx].data   = NULL;
++    iovec[idx].length = 0;
++
++    memset(ibuffer, 0x0, sizeof(ibuffer));
++    memset(obuffer, 0x0, sizeof(obuffer));
++
++    trqh->tag     = cpu_to_be16(0xc1);
++    trqh->totlen  = cpu_to_be32(TPM_REQ_HEADER_SIZE + append_size + otherdata_size);
++    trqh->ordinal = cpu_to_be32(ordinal);
++
++    if (append_size)
++        memcpy((char *)trqh + sizeof(*trqh),
++               append, append_size);
++
++    rc = transmit(locty, iovec, obuffer, &obuffer_len, to_t);
++    if (rc)
++        return rc;
++
++    *returnCode = be32_to_cpu(trsh->errcode);
++
++    if (resbuffer)
++        memcpy(resbuffer, trsh, return_size);
++
++    return 0;
++}
++
++
++static u32
++build_and_send_cmd(u32 ordinal, const u8 *append, u32 append_size,
++                   u8 *resbuffer, u32 return_size, u32 *returnCode,
++                   enum tpmDurationType to_t)
++{
++    return build_and_send_cmd_od(ordinal, append, append_size,
++                                 resbuffer, return_size, returnCode,
++                                 NULL, 0, to_t);
++}
++
++
++static u32
++determine_timeouts(void)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_res_getcap_timeouts timeouts;
++    struct tpm_res_getcap_durations durations;
++    struct tpm_driver *td = &tpm_drivers[tcpa_state.tpm_driver_to_use];
++    u32 i;
++
++    rc = build_and_send_cmd(TPM_ORD_GetCapability,
++                            GetCapability_Timeouts,
++                            sizeof(GetCapability_Timeouts),
++                            (u8 *)&timeouts,
++                            sizeof(struct tpm_res_getcap_timeouts),
++                            &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Return code from TPM_GetCapability(Timeouts)"
++            " = 0x%08x\n", returnCode);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.get_timeouts_error = rc ? rc : returnCode;
++#endif
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    rc = build_and_send_cmd(TPM_ORD_GetCapability,
++                            GetCapability_Durations,
++                            sizeof(GetCapability_Durations),
++                            (u8 *)&durations,
++                            sizeof(struct tpm_res_getcap_durations),
++                            &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Return code from TPM_GetCapability(Durations)"
++            " = 0x%08x\n", returnCode);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.get_durations_error = rc ? rc : returnCode;
++#endif
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    for (i = 0; i < 3; i++)
++        durations.durations[i] = be32_to_cpu(durations.durations[i]);
++
++    for (i = 0; i < 4; i++)
++        timeouts.timeouts[i] = be32_to_cpu(timeouts.timeouts[i]);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: timeouts: %u %u %u %u\n",
++            timeouts.timeouts[0],
++            timeouts.timeouts[1],
++            timeouts.timeouts[2],
++            timeouts.timeouts[3]);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: durations: %u %u %u\n",
++            durations.durations[0],
++            durations.durations[1],
++            durations.durations[2]);
++
++
++    td->set_timeouts(timeouts.timeouts, durations.durations);
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++u32
++tcpa_startup(void)
++{
++    u32 rc;
++    u32 returnCode;
++
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Starting with TPM_Startup(ST_CLEAR)\n");
++    rc = build_and_send_cmd(TPM_ORD_Startup,
++                            Startup_ST_CLEAR, sizeof(Startup_ST_CLEAR),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "Return code from TPM_Startup = 0x%08x\n",
++            returnCode);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.startup_error = rc ? rc : returnCode;
++#endif
++
++#ifdef CONFIG_COREBOOT
++    /* with other firmware on the system the TPM may already have been
++     * initialized
++     */
++    if (returnCode == TPM_INVALID_POSTINIT)
++        returnCode = 0;
++#endif
++
++     if (rc || returnCode)
++        goto err_exit;
++
++    rc = build_and_send_cmd(TPM_ORD_SelfTestFull, NULL, 0,
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_LONG);
++
++    dprintf(DEBUG_tcg, "Return code from TPM_SelfTestFull = 0x%08x\n",
++            returnCode);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.selftest_error = rc ? rc : returnCode;
++#endif
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    rc = determine_timeouts();
++    if (rc)
++        goto err_exit;
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++u32
++tcpa_leave_bios(void)
++{
++    u32 rc;
++    u32 returnCode;
++
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    rc = build_and_send_cmd(TPM_ORD_PhysicalPresence,
++                            PhysicalPresence_CMD_ENABLE,
++                            sizeof(PhysicalPresence_CMD_ENABLE),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.physpresence_enable_error = rc ? rc : returnCode;
++#endif
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    rc = build_and_send_cmd(TPM_ORD_PhysicalPresence,
++                            PhysicalPresence_NOT_PRESENT_LOCK,
++                            sizeof(PhysicalPresence_NOT_PRESENT_LOCK),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.physpresence_lock_error = rc ? rc : returnCode;
++#endif
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++static int
++is_valid_pcpes(struct pcpes *pcpes)
++{
++    return (pcpes->eventtype != 0);
++}
++
++
++static u8 *
++get_lasa_last_ptr(u16 *entry_count, u8 **lasa_next)
++{
++    struct pcpes *pcpes;
++    u32 laml;
++    u8 *lasa_base = get_lasa_base_ptr(&laml);
++    u8 *lasa_last = NULL;
++    u8 *end = lasa_base + laml;
++    u32 size;
++
++    if (entry_count)
++        *entry_count = 0;
++
++    if (!lasa_base)
++        return NULL;
++
++    while (lasa_base < end) {
++        pcpes = (struct pcpes *)lasa_base;
++        if (!is_valid_pcpes(pcpes))
++            break;
++        if (entry_count)
++            (*entry_count)++;
++        size = pcpes->eventdatasize + offsetof(struct pcpes, event);
++        lasa_last = lasa_base;
++        lasa_base += size;
++    }
++
++    if (lasa_next)
++        *lasa_next = lasa_base;
++
++    return lasa_last;
++}
++
++
++static u32
++tpm_sha1_calc(const u8 *data, u32 length, u8 *hash)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_res_sha1start start;
++    struct tpm_res_sha1complete complete;
++    u32 blocks = length / 64;
++    u32 rest = length & 0x3f;
++    u32 numbytes, numbytes_no;
++    u32 offset = 0;
++
++    rc = build_and_send_cmd(TPM_ORD_SHA1Start,
++                            NULL, 0,
++                            (u8 *)&start,
++                            sizeof(struct tpm_res_sha1start),
++                            &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    while (blocks > 0) {
++
++        numbytes = be32_to_cpu(start.max_num_bytes);
++        if (numbytes > blocks * 64)
++             numbytes = blocks * 64;
++
++        numbytes_no = cpu_to_be32(numbytes);
++
++        rc = build_and_send_cmd_od(TPM_ORD_SHA1Update,
++                                   (u8 *)&numbytes_no, sizeof(numbytes_no),
++                                   NULL, 0, &returnCode,
++                                   &data[offset], numbytes,
++                                   TPM_DURATION_TYPE_SHORT);
++
++        if (rc || returnCode)
++            goto err_exit;
++
++        offset += numbytes;
++        blocks -= (numbytes / 64);
++    }
++
++    numbytes_no = cpu_to_be32(rest);
++
++    rc = build_and_send_cmd_od(TPM_ORD_SHA1Complete,
++                              (u8 *)&numbytes_no, sizeof(numbytes_no),
++                              (u8 *)&complete,
++                              sizeof(struct tpm_res_sha1complete),
++                              &returnCode,
++                              &data[offset], rest, TPM_DURATION_TYPE_SHORT);
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++    tcpa_state.sha1_error = rc ? rc : returnCode;
++#endif
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    memcpy(hash, complete.hash, sizeof(complete.hash));
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM SHA1 malfunctioning.\n");
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++sha1_calc(const u8 *data, u32 length, u8 *hash)
++{
++    if (length < tpm_drivers[tcpa_state.tpm_driver_to_use].sha1threshold)
++        return tpm_sha1_calc(data, length, hash);
++
++    return sha1(data, length, hash);
++}
++
++
++/*
++ * Extend the ACPI log with the given entry by copying the
++ * entry data into the log.
++ * Input
++ *  Pointer to the structure to be copied into the log
++ *
++ * Output:
++ *  lower 16 bits of return code contain entry number
++ *  if entry number is '0', then upper 16 bits contain error code.
++ */
++static u32
++tcpa_extend_acpi_log(void *entry_ptr, u16 *entry_count)
++{
++    u32 laml, size;
++    u8 *lasa_base = get_lasa_base_ptr(&laml), *lasa_next = NULL;
++    struct pcpes *pcpes = (struct pcpes *)entry_ptr;
++
++    get_lasa_last_ptr(entry_count, &lasa_next);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: LASA_BASE = %p, LASA_NEXT = %p\n",lasa_base, lasa_next);
++
++    if (lasa_next == NULL || laml == 0)
++        return TCG_PC_LOGOVERFLOW;
++
++    size = pcpes->eventdatasize + offsetof(struct pcpes, event);
++
++    if ((lasa_next + size - lasa_base) > laml) {
++        dprintf(DEBUG_tcg, "TCGBIOS: LOG OVERFLOW: size = %d\n", size);
++        return TCG_PC_LOGOVERFLOW;
++    }
++
++    memcpy(lasa_next, entry_ptr, size);
++
++    (*entry_count)++;
++
++    return 0;
++}
++
++
++static u32
++is_preboot_if_shutdown(void)
++{
++    return tcpa_state.if_shutdown;
++}
++
++
++static u32
++shutdown_preboot_interface(void)
++{
++    u32 rc = 0;
++
++    if (!is_preboot_if_shutdown()) {
++        tcpa_state.if_shutdown = 1;
++    } else {
++        rc = TCG_INTERFACE_SHUTDOWN;
++    }
++
++    return rc;
++}
++
++
++static void
++tcpa_shutdown(void)
++{
++    reset_acpi_log();
++    shutdown_preboot_interface();
++}
++
++
++static u32
++pass_through_to_tpm(struct pttti *pttti, struct pttto *pttto)
++{
++    u32 rc = 0;
++    u32 resbuflen = 0;
++    struct tpm_req_header *trh;
++    u8 locty = 0;
++    struct iovec iovec[2];
++    const u32 *tmp;
++
++    if (is_preboot_if_shutdown()) {
++        rc = TCG_INTERFACE_SHUTDOWN;
++        goto err_exit;
++    }
++
++    trh = (struct tpm_req_header *)pttti->tpmopin;
++
++    if (pttti->ipblength < sizeof(struct pttti) + TPM_REQ_HEADER_SIZE ||
++        pttti->opblength < sizeof(struct pttto) ||
++        be32_to_cpu(trh->totlen)  + sizeof(struct pttti) > pttti->ipblength ) {
++        rc = TCG_INVALID_INPUT_PARA;
++        goto err_exit;
++    }
++
++    resbuflen = pttti->opblength - offsetof(struct pttto, tpmopout);
++
++    iovec[0].data   = pttti->tpmopin;
++    tmp = (const u32 *)&((u8 *)iovec[0].data)[2];
++    iovec[0].length = cpu_to_be32(*tmp);
++
++    iovec[1].data   = NULL;
++    iovec[1].length = 0;
++
++    rc = transmit(locty, iovec, pttto->tpmopout, &resbuflen,
++                  TPM_DURATION_TYPE_LONG /* worst case */);
++    if (rc)
++        goto err_exit;
++
++    pttto->opblength = offsetof(struct pttto, tpmopout) + resbuflen;
++    pttto->reserved  = 0;
++
++err_exit:
++    if (rc != 0) {
++        pttto->opblength = 4;
++        pttto->reserved = 0;
++    }
++
++    return rc;
++}
++
++
++static u32
++tpm_extend(u8 *hash, u32 pcrindex)
++{
++    u32 rc;
++    struct pttto_extend pttto;
++    struct pttti_extend pttti = {
++        .pttti = {
++            .ipblength = sizeof(struct pttti_extend),
++            .opblength = sizeof(struct pttto_extend),
++        },
++        .req = {
++            .tag      = cpu_to_be16(0xc1),
++            .totlen   = cpu_to_be32(sizeof(pttti.req)),
++            .ordinal  = cpu_to_be32(TPM_ORD_Extend),
++            .pcrindex = cpu_to_be32(pcrindex),
++        },
++    };
++
++    memcpy(pttti.req.digest, hash, sizeof(pttti.req.digest));
++
++    rc = pass_through_to_tpm(&pttti.pttti, &pttto.pttto);
++
++    if (rc == 0) {
++        if (pttto.pttto.opblength < TPM_RSP_HEADER_SIZE ||
++            pttto.pttto.opblength !=
++                sizeof(struct pttto) + be32_to_cpu(pttto.rsp.totlen) ||
++            be16_to_cpu(pttto.rsp.tag) != 0xc4) {
++            rc = TCG_FATAL_COM_ERROR;
++        }
++    }
++
++    if (rc)
++        tcpa_shutdown();
++
++    return rc;
++}
++
++
++static u32
++hash_all(const struct hai *hai, u8 *hash)
++{
++    if (is_preboot_if_shutdown() != 0)
++        return TCG_INTERFACE_SHUTDOWN;
++
++    if (hai->ipblength != sizeof(struct hai) ||
++        hai->hashdataptr == 0 ||
++        hai->hashdatalen == 0 ||
++        hai->algorithmid != TPM_ALG_SHA)
++        return TCG_INVALID_INPUT_PARA;
++
++    return sha1_calc((const u8 *)hai->hashdataptr, hai->hashdatalen, hash);
++}
++
++
++static u32
++hash_log_event(const struct hlei *hlei, struct hleo *hleo)
++{
++    u32 rc = 0;
++    u16 size;
++    struct pcpes *pcpes;
++    u16 entry_count;
++
++    if (is_preboot_if_shutdown() != 0) {
++        rc = TCG_INTERFACE_SHUTDOWN;
++        goto err_exit;
++    }
++
++    size = hlei->ipblength;
++    if (size != sizeof(*hlei)) {
++        rc = TCG_INVALID_INPUT_PARA;
++        goto err_exit;
++    }
++
++    pcpes = (struct pcpes *)hlei->logdataptr;
++
++    if (pcpes->pcrindex >= 24 ||
++        pcpes->pcrindex  != hlei->pcrindex ||
++        pcpes->eventtype != hlei->logeventtype) {
++        rc = TCG_INVALID_INPUT_PARA;
++        goto err_exit;
++    }
++
++    if ((hlei->hashdataptr != 0) && (hlei->hashdatalen != 0)) {
++        rc = sha1_calc((const u8 *)hlei->hashdataptr,
++                       hlei->hashdatalen, pcpes->digest);
++        if (rc)
++            return rc;
++    }
++
++    rc = tcpa_extend_acpi_log((void *)hlei->logdataptr, &entry_count);
++    if (rc)
++        goto err_exit;
++
++    /* updating the log was fine */
++    hleo->opblength = sizeof(struct hleo);
++    hleo->reserved  = 0;
++    hleo->eventnumber = entry_count;
++
++err_exit:
++    if (rc != 0) {
++        hleo->opblength = 2;
++        hleo->reserved = 0;
++    }
++
++    return rc;
++}
++
++
++static u32
++hash_log_extend_event(const struct hleei_short *hleei_s, struct hleeo *hleeo)
++{
++    u32 rc = 0;
++    struct hleo hleo;
++    struct hleei_long *hleei_l = (struct hleei_long *)hleei_s;
++    const void *logdataptr;
++    u32 logdatalen;
++    struct pcpes *pcpes;
++
++    /* short or long version? */
++    switch (hleei_s->ipblength) {
++    case sizeof(struct hleei_short):
++        /* short */
++        logdataptr = hleei_s->logdataptr;
++        logdatalen = hleei_s->logdatalen;
++    break;
++
++    case sizeof(struct hleei_long):
++        /* long */
++        logdataptr = hleei_l->logdataptr;
++        logdatalen = hleei_l->logdatalen;
++    break;
++
++    default:
++        /* bad input block */
++        rc = TCG_INVALID_INPUT_PARA;
++        goto err_exit;
++    }
++
++    pcpes = (struct pcpes *)logdataptr;
++
++    struct hlei hlei = {
++        .ipblength   = sizeof(hlei),
++        .hashdataptr = hleei_s->hashdataptr,
++        .hashdatalen = hleei_s->hashdatalen,
++        .pcrindex    = hleei_s->pcrindex,
++        .logeventtype= pcpes->eventtype,
++        .logdataptr  = logdataptr,
++        .logdatalen  = logdatalen,
++    };
++
++    rc = hash_log_event(&hlei, &hleo);
++    if (rc)
++        goto err_exit;
++
++    hleeo->opblength = sizeof(struct hleeo);
++    hleeo->reserved  = 0;
++    hleeo->eventnumber = hleo.eventnumber;
++
++    rc = tpm_extend(pcpes->digest, hleei_s->pcrindex);
++
++err_exit:
++    if (rc != 0) {
++        hleeo->opblength = 4;
++        hleeo->reserved  = 0;
++    }
++
++    return rc;
++
++}
++
++
++static u32
++tss(struct ti *ti, struct to *to)
++{
++    u32 rc = 0;
++
++    if (is_preboot_if_shutdown() == 0) {
++        rc = TCG_PC_UNSUPPORTED;
++    } else {
++        rc = TCG_INTERFACE_SHUTDOWN;
++    }
++
++    to->opblength = sizeof(struct to);
++    to->reserved  = 0;
++
++    return rc;
++}
++
++
++static u32
++compact_hash_log_extend_event(u8 *buffer,
++                              u32 info,
++                              u32 length,
++                              u32 pcrindex,
++                              u32 *edx_ptr)
++{
++    u32 rc = 0;
++    struct hleeo hleeo;
++    struct pcpes pcpes = {
++        .pcrindex      = pcrindex,
++        .eventtype     = EV_COMPACT_HASH,
++        .eventdatasize = sizeof(info),
++        .event         = info,
++    };
++    struct hleei_short hleei = {
++        .ipblength   = sizeof(hleei),
++        .hashdataptr = buffer,
++        .hashdatalen = length,
++        .pcrindex    = pcrindex,
++        .logdataptr  = &pcpes,
++        .logdatalen  = sizeof(pcpes),
++    };
++
++    rc = hash_log_extend_event(&hleei, &hleeo);
++    if (rc == 0)
++        *edx_ptr = hleeo.eventnumber;
++
++    return rc;
++}
++
++
++void VISIBLE32FLAT
++tcpa_interrupt_handler32(struct bregs *regs)
++{
++    if (!CONFIG_TCGBIOS)
++        return;
++
++    set_cf(regs, 0);
++
++    if (!has_working_tpm()) {
++        regs->eax = TCG_GENERAL_ERROR;
++        return;
++    }
++
++    switch ((enum irq_ids)regs->al) {
++    case TCG_StatusCheck:
++        if (is_tpm_present() == 0) {
++            /* no TPM available */
++            regs->eax = TCG_PC_TPM_NOT_PRESENT;
++        } else {
++            regs->eax = 0;
++            regs->ebx = TCG_MAGIC;
++            regs->ch = TCG_VERSION_MAJOR;
++            regs->cl = TCG_VERSION_MINOR;
++            regs->edx = 0x0;
++            regs->esi = (u32)get_lasa_base_ptr(NULL);
++            regs->edi =
++                  (u32)get_lasa_last_ptr(NULL, NULL);
++        }
++        break;
++
++    case TCG_HashLogExtendEvent:
++        regs->eax =
++            hash_log_extend_event(
++                  (struct hleei_short *)input_buf32(regs),
++                  (struct hleeo *)output_buf32(regs));
++        break;
++
++    case TCG_PassThroughToTPM:
++        regs->eax =
++            pass_through_to_tpm((struct pttti *)input_buf32(regs),
++                                (struct pttto *)output_buf32(regs));
++        break;
++
++    case TCG_ShutdownPreBootInterface:
++        regs->eax = shutdown_preboot_interface();
++        break;
++
++    case TCG_HashLogEvent:
++        regs->eax = hash_log_event((struct hlei*)input_buf32(regs),
++                                   (struct hleo*)output_buf32(regs));
++        break;
++
++    case TCG_HashAll:
++        regs->eax =
++            hash_all((struct hai*)input_buf32(regs),
++                     (u8 *)output_buf32(regs));
++        break;
++
++    case TCG_TSS:
++        regs->eax = tss((struct ti*)input_buf32(regs),
++                    (struct to*)output_buf32(regs));
++        break;
++
++    case TCG_CompactHashLogExtendEvent:
++        regs->eax =
++          compact_hash_log_extend_event((u8 *)input_buf32(regs),
++                                        regs->esi,
++                                        regs->ecx,
++                                        regs->edx,
++                                        &regs->edx);
++        break;
++
++    default:
++        set_cf(regs, 1);
++    }
++
++    return;
++}
++
++/*
++ * Add a measurement to the log; the data at data_seg:data/length are
++ * appended to the TCG_PCClientPCREventStruct
++ *
++ * Input parameters:
++ *  pcrIndex   : which PCR to extend
++ *  event_type : type of event; specs 10.4.1
++ *  data       : pointer to the data (i.e., string) to be added to the log
++ *  length     : length of the data
++ */
++static u32
++tcpa_add_measurement_to_log(u32 pcrIndex,
++                            u32 event_type,
++                            const char *data, u32 length)
++{
++    u32 rc = 0;
++    struct hleeo hleeo;
++    u8 _pcpes[offsetof(struct pcpes, event) + 400];
++    struct pcpes *pcpes = (struct pcpes *)_pcpes;
++
++    if (length < sizeof(_pcpes) - offsetof(struct pcpes, event)) {
++
++        pcpes->pcrindex      = pcrIndex;
++        pcpes->eventtype     = event_type;
++        memset(&pcpes->digest, 0x0, sizeof(pcpes->digest));
++        pcpes->eventdatasize = length;
++        memcpy(&pcpes->event, data, length);
++
++        struct hleei_short hleei = {
++            .ipblength   = sizeof(hleei),
++            .hashdataptr = &pcpes->event,
++            .hashdatalen = length,
++            .pcrindex    = pcrIndex,
++            .logdataptr  = _pcpes,
++            .logdatalen  = length + offsetof(struct pcpes, event),
++        };
++
++        rc = hash_log_extend_event(&hleei, &hleeo);
++    } else {
++        rc = TCG_GENERAL_ERROR;
++    }
++
++    return rc;
++}
++
++
++/*
++ * Add a measurement to the log; further description of the data
++ * that are to be hashed are NOT appended to the TCG_PCClientPCREventStruc.
++ * Input parameters:
++ *  pcrIndex   : PCR to extend
++ *  event_type : type of event; specs 10.4.1
++ *  ptr        : 32 bit pointer to the data to be hashed
++ *  length     : length of the data to be hashed
++ *
++ * Returns lower 16 bit of return code of TCG_HashLogExtendEvent. '0' means
++ * success, otherwise an error is indicated.
++ */
++static u32
++tcpa_add_measurement_to_log_simple(u32 pcrIndex,
++                                   u16 event_type,
++                                   const u8 *ptr, u32 length)
++{
++    struct hleeo hleeo;
++    struct pcpes pcpes = {
++        .pcrindex = pcrIndex,
++        .eventtype = event_type,
++        /* specs: 10.4.1, EV_IPL eventfield should not contain the code.*/
++        .eventdatasize = 0,
++        .event = 0,
++    };
++    struct hleei_short hleei = {
++        .ipblength   = sizeof(hleei),
++        .hashdataptr = ptr,
++        .hashdatalen = length,
++        .pcrindex    = pcrIndex,
++        .logdataptr  = &pcpes,
++        .logdatalen  = offsetof(struct pcpes, event),
++    };
++
++    return hash_log_extend_event(&hleei, &hleeo);
++}
++
++
++/*
++ * Add a measurement to the list of measurements
++ * pcrIndex   : PCR to be extended
++ * event_type : type of event; specs 10.4.1
++ * data       : additional parameter; used as parameter for 10.4.3
++ *              'action index'
++ */
++static u32
++tcpa_add_measurement(u32 pcrIndex,
++                     u16 event_type,
++                     const char *string)
++{
++    u32 rc;
++
++    switch (event_type) {
++    case EV_SEPARATOR:
++        rc = tcpa_add_measurement_to_log_simple(pcrIndex,
++                                                event_type,
++                                                (u8 *)evt_separator,
++                                                4);
++        break;
++
++    case EV_ACTION:
++        rc = tcpa_add_measurement_to_log(pcrIndex,
++                                         event_type,
++                                         string,
++                                         strlen(string));
++        break;
++
++    default:
++        rc = TCG_INVALID_INPUT_PARA;
++    }
++
++    return rc;
++}
++
++
++u32
++tcpa_calling_int19h(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    return tcpa_add_measurement(4, EV_ACTION,
++                                "Calling INT 19h");
++}
++
++
++u32
++tcpa_returned_via_int18h(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    return tcpa_add_measurement(4, EV_ACTION,
++                                "Return via INT 18h");
++}
++
++
++/*
++ * Add event separators for PCRs 0 to 7; specs 8.2.3
++ */
++u32
++tcpa_add_event_separators(void)
++{
++    u32 rc;
++    u32 pcrIndex = 0;
++
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    while (pcrIndex <= 7) {
++        rc = tcpa_add_measurement(pcrIndex, EV_SEPARATOR, NULL);
++        if (rc)
++            break;
++        pcrIndex ++;
++    }
++
++    return rc;
++}
++
++
++/*
++ * Add a measurement regarding the boot device (CDRom, Floppy, HDD) to
++ * the list of measurements.
++ */
++u32
++tcpa_add_bootdevice(u32 bootcd, u32 bootdrv)
++{
++    const char *string;
++
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    switch (bootcd) {
++    case 0:
++        switch (bootdrv) {
++        case 0:
++            string = "Booting BCV device 00h (Floppy)";
++            break;
++
++        case 0x80:
++            string = "Booting BCV device 80h (HDD)";
++            break;
++
++        default:
++            string = "Booting unknown device";
++            break;
++        }
++
++        break;
++
++    default:
++        string = "Booting from CD ROM device";
++    }
++
++    return tcpa_add_measurement_to_log(4, EV_ACTION,
++                                       string, strlen(string));
++}
++
++
++/*
++ * Add measurement to the log about option rom scan
++ * 10.4.3 : action 14
++ */
++u32
++tcpa_start_option_rom_scan(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    return tcpa_add_measurement(2, EV_ACTION,
++                                "Start Option ROM Scan");
++}
++
++
++/*
++ * Add measurement to the log about an option rom
++ */
++u32
++tcpa_option_rom(const void *addr, u32 len)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    u32 rc;
++    struct pcctes_romex pcctes = {
++        .eventid = 7, /* 10.4.2.3.7 */
++        .eventdatasize = sizeof(u16) + sizeof(u16) + SHA1_BUFSIZE,
++    };
++
++    rc = sha1((const u8 *)addr, len, pcctes.digest);
++    if (rc)
++        return rc;
++
++    return tcpa_add_measurement_to_log(2,
++                                       EV_EVENT_TAG,
++                                       (const char *)&pcctes,
++                                       sizeof(pcctes));
++}
++
++
++u32
++tcpa_smbios_measure(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    u32 rc;
++    struct pcctes pcctes = {
++        .eventid = 1, /* 10.4.2.3.1 */
++        .eventdatasize = SHA1_BUFSIZE,
++    };
++    struct smbios_entry_point *sep = SMBiosAddr;
++
++    dprintf(DEBUG_tcg, "TCGBIOS: SMBIOS at %p\n", sep);
++
++    if (!sep)
++        return 0;
++
++    rc = sha1((const u8 *)sep->structure_table_address,
++              sep->structure_table_length, pcctes.digest);
++    if (rc)
++        return rc;
++
++    return tcpa_add_measurement_to_log(1,
++                                       EV_EVENT_TAG,
++                                       (const char *)&pcctes,
++                                       sizeof(pcctes));
++}
++
++
++/*
++ * Add a measurement to the log in support of 8.2.5.3
++ * Creates two log entries
++ *
++ * Input parameter:
++ *  bootcd : 0: MBR of hdd, 1: boot image, 2: boot catalog of El Torito
++ *  addr   : address where the IP data are located
++ *  length : IP data length in bytes
++ */
++u32
++tcpa_ipl(enum ipltype bootcd, const u8 *addr, u32 length)
++{
++    u32 rc;
++
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    switch (bootcd) {
++    case IPL_EL_TORITO_1:
++        /* specs: 8.2.5.6 El Torito */
++        rc = tcpa_add_measurement_to_log_simple(4,
++                                                EV_IPL,
++                                                addr,
++                                                length);
++        break;
++
++    case IPL_EL_TORITO_2:
++        /* specs: 8.2.5.6 El Torito */
++        rc = tcpa_add_measurement_to_log_simple(5,
++                                                EV_IPL_PARTITION_DATA,
++                                                addr,
++                                                length);
++        break;
++
++    default:
++        /* specs: 8.2.5.3 */
++        /* equivalent to: dd if=/dev/hda ibs=1 count=440 | sha1sum */
++        rc = tcpa_add_measurement_to_log_simple(4,
++                                                EV_IPL,
++                                                addr,
++                                                0x1b8);
++
++        if (rc)
++            break;
++
++        /* equivalent to: dd if=/dev/hda ibs=1 count=72 skip=440 | sha1sum */
++        rc = tcpa_add_measurement_to_log_simple(5,
++                                                EV_IPL_PARTITION_DATA,
++                                                addr + 0x1b8,
++                                                0x48);
++    }
++
++    return rc;
++}
++
++
++static u32
++read_stclear_flags(char *buf, int buf_len)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_res_getcap_stclear_flags stcf;
++
++    memset(buf, 0x0, buf_len);
++
++    rc = build_and_send_cmd(TPM_ORD_GetCapability,
++                            GetCapability_STClear_Flags,
++                            sizeof(GetCapability_STClear_Flags),
++                            (u8 *)&stcf,
++                            sizeof(struct tpm_res_getcap_stclear_flags),
++                            &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Return code from TPM_GetCapability() "
++            "= 0x%08x\n", returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    memcpy(buf, &stcf.stclear_flags, buf_len);
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++assert_physical_presence(int verbose)
++{
++    u32 rc = 0;
++    u32 returnCode;
++    struct tpm_stclear_flags stcf;
++
++    rc = read_stclear_flags((char *)&stcf, sizeof(stcf));
++    if (rc) {
++        dprintf(DEBUG_tcg,
++                "Error reading STClear flags: 0x%08x\n", rc);
++        return rc;
++    }
++
++    if (stcf.flags[STCLEAR_FLAG_IDX_PHYSICAL_PRESENCE])
++        /* physical presence already asserted */
++        return 0;
++
++    rc = build_and_send_cmd(TPM_ORD_PhysicalPresence,
++                            PhysicalPresence_CMD_ENABLE,
++                            sizeof(PhysicalPresence_CMD_ENABLE),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg,
++           "Return code from TSC_PhysicalPresence(CMD_ENABLE) = 0x%08x\n",
++           returnCode);
++
++    if (rc || returnCode) {
++        if (verbose)
++            printf("Error: Could not enable physical presence.\n\n");
++        goto err_exit;
++    }
++
++    rc = build_and_send_cmd(TPM_ORD_PhysicalPresence,
++                            PhysicalPresence_PRESENT,
++                            sizeof(PhysicalPresence_PRESENT),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg,
++           "Return code from TSC_PhysicalPresence(PRESENT) = 0x%08x\n",
++           returnCode);
++
++    if (rc || returnCode) {
++        if (verbose)
++            printf("Error: Could not set presence flag.\n\n");
++        goto err_exit;
++    }
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++read_permanent_flags(char *buf, int buf_len)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_res_getcap_perm_flags pf;
++
++    memset(buf, 0x0, buf_len);
++
++    rc = build_and_send_cmd(TPM_ORD_GetCapability,
++                            GetCapability_Permanent_Flags,
++                            sizeof(GetCapability_Permanent_Flags),
++                            (u8 *)&pf,
++                            sizeof(struct tpm_res_getcap_perm_flags),
++                            &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Return code from TPM_GetCapability() "
++            "= 0x%08x\n", returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    memcpy(buf, &pf.perm_flags, buf_len);
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++read_has_owner(u8 *has_owner)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_res_getcap_ownerauth oauth;
++
++    rc = build_and_send_cmd(TPM_ORD_GetCapability,
++                            GetCapability_OwnerAuth,
++                            sizeof(GetCapability_OwnerAuth),
++                            (u8 *)&oauth,
++                            sizeof(struct tpm_res_getcap_ownerauth),
++                            &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Return code from TPM_GetCapability() "
++            "= 0x%08x\n", returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    *has_owner = oauth.flag;
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg,"TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++disable_tpm(int disable, int verbose)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_permanent_flags pf;
++
++    rc = read_permanent_flags((char *)&pf, sizeof(pf));
++    if (rc)
++        return rc;
++
++    if (!!pf.flags[PERM_FLAG_IDX_DISABLE] == !!disable) {
++        if (verbose)
++            printf("TPM is already %s.\n,",
++                   disable ? "disabled" : "enabled");
++        return 0;
++    }
++
++    rc = assert_physical_presence(verbose);
++    if (rc) {
++        dprintf(DEBUG_tcg, "TCGBIOS: Asserting physical presence failed.\n");
++        return rc;
++    }
++
++    rc = build_and_send_cmd(disable ? TPM_ORD_PhysicalDisable
++                                    : TPM_ORD_PhysicalEnable,
++                            NULL, 0, NULL, 10, &returnCode,
++                            TPM_DURATION_TYPE_SHORT);
++    dprintf(DEBUG_tcg, "Return code from TPM_Physical%sable = 0x%08x\n",
++            disable ? "Dis" : "En", returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: %sabling the TPM failed.\n",
++            disable ? "Dis" : "En");
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++deactivate_tpm(int deactivate, int allow_reset, int verbose)
++{
++    u32 rc;
++    u32 returnCode;
++    struct tpm_permanent_flags pf;
++
++    rc = read_permanent_flags((char *)&pf, sizeof(pf));
++    if (rc)
++        return rc;
++
++    if (!!pf.flags[PERM_FLAG_IDX_DEACTIVATED] == !!deactivate) {
++        if (verbose)
++            printf("TPM is already %s.\n",
++                   deactivate ? "deactivated" : "activated");
++        return 0;
++    }
++
++    if (pf.flags[PERM_FLAG_IDX_DISABLE]) {
++        if (verbose)
++            printf("TPM must first be enabled.\n");
++        return 0;
++    }
++
++    rc = assert_physical_presence(verbose);
++    if (rc) {
++        dprintf(DEBUG_tcg, "TCGBIOS: Asserting physical presence failed.\n");
++        return rc;
++    }
++
++    rc = build_and_send_cmd(TPM_ORD_PhysicalSetDeactivated,
++                            deactivate ? CommandFlag_TRUE
++                                       : CommandFlag_FALSE,
++                            deactivate ? sizeof(CommandFlag_TRUE)
++                                       : sizeof(CommandFlag_FALSE),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg,
++            "Return code from PhysicalSetDeactivated(%d) = 0x%08x\n",
++            deactivate ? 1 : 0, returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    if (!deactivate && allow_reset) {
++        if (verbose) {
++            printf("Requiring a reboot to activate the TPM.\n");
++
++            msleep(2000);
++        }
++        extern void reset_vector(void) __noreturn;
++        reset_vector();
++    }
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++enable_activate(int allow_reset, int verbose)
++{
++    u32 rc;
++
++    rc = disable_tpm(0, verbose);
++    if (rc)
++        return rc;
++
++    rc = deactivate_tpm(0, allow_reset, verbose);
++
++    return rc;
++}
++
++
++static u32
++force_clear(int enable_activate_before, int enable_activate_after, int verbose)
++{
++    u32 rc;
++    u32 returnCode;
++    u8 has_owner;
++
++    rc = read_has_owner(&has_owner);
++    if (rc)
++        return rc;
++    if (!has_owner) {
++        if (verbose)
++            printf("TPM does not have an owner.\n");
++        return 0;
++    }
++
++    if (enable_activate_before) {
++        rc = enable_activate(0, verbose);
++        if (rc) {
++            dprintf(DEBUG_tcg,
++                    "TCGBIOS: Enabling/activating the TPM failed.\n");
++            return rc;
++        }
++    }
++
++    rc = assert_physical_presence(verbose);
++    if (rc) {
++        dprintf(DEBUG_tcg, "TCGBIOS: Asserting physical presence failed.\n");
++        return rc;
++    }
++
++    rc = build_and_send_cmd(TPM_ORD_ForceClear,
++                            NULL, 0, NULL, 10, &returnCode,
++                            TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "Return code from TPM_ForceClear() = 0x%08x\n",
++            returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    if (!enable_activate_after) {
++        if (verbose)
++            printf("Owner successfully cleared.\n"
++                   "You will need to enable/activate the TPM again.\n\n");
++        return 0;
++    }
++
++    enable_activate(1, verbose);
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static u32
++set_owner_install(int allow, int verbose)
++{
++    u32 rc, returnCode;
++    u8 has_owner;
++    struct tpm_permanent_flags pf;
++
++    rc = read_has_owner(&has_owner);
++    if (rc)
++        return rc;
++    if (has_owner) {
++        if (verbose)
++            printf("Must first remove owner.\n");
++        return 0;
++    }
++
++    rc = read_permanent_flags((char *)&pf, sizeof(pf));
++    if (rc)
++        return rc;
++
++    if (pf.flags[PERM_FLAG_IDX_DISABLE]) {
++        if (verbose)
++            printf("TPM must first be enable.\n");
++        return 0;
++    }
++
++    rc = assert_physical_presence(verbose);
++    if (rc) {
++        dprintf(DEBUG_tcg, "TCGBIOS: Asserting physical presence failed.\n");
++        return rc;
++    }
++
++    rc = build_and_send_cmd(TPM_ORD_SetOwnerInstall,
++                            (allow) ? CommandFlag_TRUE :
++                                      CommandFlag_FALSE,
++                            sizeof(CommandFlag_TRUE),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "Return code from TPM_SetOwnerInstall() = 0x%08x\n",
++           returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    if (verbose)
++        printf("Installation of owner %s.\n", allow ? "enabled" : "disabled");
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
++
++
++static void
++show_tpm_state(void)
++{
++    struct tpm_permanent_flags pf;
++    u8 has_owner;
++
++    if (read_permanent_flags((char *)&pf, sizeof(pf)) ||
++        read_has_owner(&has_owner))
++        return;
++
++    printf("TPM is ");
++
++    if (pf.flags[PERM_FLAG_IDX_DISABLE])
++        printf("disabled");
++    else
++        printf("enabled");
++
++    if (pf.flags[PERM_FLAG_IDX_DEACTIVATED])
++        printf(", deactivated");
++    else
++        printf(", active");
++
++    if (has_owner)
++        printf(" and has an owner.\n");
++    else {
++        printf(", does not have an owner ");
++        if (pf.flags[PERM_FLAG_IDX_OWNERSHIP])
++            printf("but one can be installed.\n");
++        else
++            printf("and an owner cannot be installed.\n");
++    }
++
++}
++
++
++static u32
++tcpa_process_cfg(const tpm_bios_cfg_t *cfg, int verbose)
++{
++    u32 rc = 0;
++
++    switch (cfg->op) {
++        case 0: /* no-op */
++            break;
++
++        case 1:
++            rc = disable_tpm(0, verbose);
++            break;
++
++        case 2:
++            rc = disable_tpm(1, verbose);
++            break;
++
++        case 3:
++            rc = deactivate_tpm(0, 1, verbose);
++            break;
++
++        case 4:
++            rc = deactivate_tpm(1, 1, verbose);
++            break;
++
++        case 5:
++            rc = force_clear(1, 0, verbose);
++            break;
++
++        case 6:
++            rc = set_owner_install(1, verbose);
++            break;
++
++        case 7:
++            rc = set_owner_install(0, verbose);
++            break;
++
++        default:
++            break;
++    }
++
++    if (rc)
++        printf("Op %d: An error occurred: 0x%x\n", cfg->op, rc);
++
++    return rc;
++}
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++static void
++wait_for_any_key(void)
++{
++    printf("Press any key to continue.\n");
++    while (get_keystroke(1000) < 0)
++         ;
++}
++
++static void
++tcpa_display_timeouts(void)
++{
++    struct tpm_driver *td;
++    int i;
++
++    td = &tpm_drivers[tcpa_state.tpm_driver_to_use];
++
++    printf("\nTIS Timeouts : ");
++
++    if (td->timeouts == NULL) {
++        printf("not known");
++    } else {
++        for (i = 0; i < 4 ; i++)
++            printf("%d ", td->timeouts[i]);
++    }
++
++    printf("\nTPM Durations: ");
++
++    if (td->durations == NULL) {
++        printf("not known");
++    } else {
++        for (i = 0; i < 3 ; i++)
++            printf("%d ", td->durations[i]);
++    }
++    printf("\n\n");
++
++    wait_for_any_key();
++}
++
++static void
++tcpa_display_tpm_version(void)
++{
++    struct tpm_driver *td;
++    u16 did, vid, rid;
++
++    td = &tpm_drivers[tcpa_state.tpm_driver_to_use];
++
++    td->get_vers_data(&did, &vid, &rid);
++
++    printf("\nDevice ID   : 0x%x\n", did);
++    printf("Vendor ID   : 0x%x\n", vid);
++    printf("Revision ID : 0x%x\n\n", rid);
++    wait_for_any_key();
++}
++
++static void
++tcpa_display_errors(void)
++{
++    printf("\ntpm probed:  %d\n", tcpa_state.tpm_probed);
++    printf("tpm working: %d\n", tcpa_state.tpm_working);
++    printf("tpm found:   %d\n", tcpa_state.tpm_found);
++    printf("startup  error: 0x%x\n", tcpa_state.startup_error);
++    printf("selftest error: 0x%x\n", tcpa_state.selftest_error);
++    printf("get timeouts error : 0x%x\n",
++           tcpa_state.get_timeouts_error);
++    printf("get durations error: 0x%x\n",
++           tcpa_state.get_durations_error);
++    printf("get sha1 error: 0x%x\n",
++           tcpa_state.sha1_error);
++    printf("phys. presence enable error: 0x%x\n",
++           tcpa_state.physpresence_enable_error);
++    printf("phys. presence lock error  : 0x%x\n\n",
++           tcpa_state.physpresence_lock_error);
++    wait_for_any_key();
++}
++
++static void
++tcpa_display_perm_flags(void)
++{
++    struct tpm_permanent_flags pf;
++    int rc;
++
++    rc = read_permanent_flags((char *)&pf, sizeof(pf));
++    if (rc)
++        return;
++
++    printf("phys. presence lifetime lock: %d\n",
++           pf.flags[PERM_FLAG_IDX_PHYSICAL_PRESENCE_LIFETIME_LOCK]);
++    printf("phys. presence hw enable: %d\n",
++           pf.flags[PERM_FLAG_IDX_PHYSICAL_PRESENCE_HW_ENABLE]);
++    printf("phys. presence cmd enable: %d\n\n",
++           pf.flags[PERM_FLAG_IDX_PHYSICAL_PRESENCE_CMD_ENABLE]);
++    wait_for_any_key();
++}
++
++static void
++tcpa_display_stclear_flags(void)
++{
++    struct tpm_stclear_flags stcf;
++    int rc;
++
++    rc = read_stclear_flags((char *)&stcf, sizeof(stcf));
++    if (rc)
++        return;
++
++    printf("phys. presence: %d\n",
++           stcf.flags[STCLEAR_FLAG_IDX_PHYSICAL_PRESENCE]);
++    printf("phys. presence lock: %d\n",
++           stcf.flags[STCLEAR_FLAG_IDX_PHYSICAL_PRESENCE_LOCK]);
++    printf("global lock: %d\n\n",
++           stcf.flags[STCLEAR_FLAG_IDX_GLOBAL_LOCK]);
++    wait_for_any_key();
++}
++
++static void
++tcpa_display_diagnostics(void)
++{
++    tcpa_display_tpm_version();
++    tcpa_display_errors();
++    tcpa_display_timeouts();
++    tcpa_display_perm_flags();
++    tcpa_display_stclear_flags();
++}
++#endif
++
++void
++tcpa_menu(void)
++{
++    if (!CONFIG_TCGBIOS)
++        return;
++
++    int scan_code;
++    u32 rc;
++    tpm_bios_cfg_t cfg = {
++        .op  = 0,
++    };
++
++    while (get_keystroke(0) >= 0)
++        ;
++    wait_threads();
++
++    for (;;) {
++        if (has_working_tpm()) {
++            printf("1. Enable TPM\n"
++                   "2. Disable TPM\n"
++                   "3. Activate TPM\n"
++                   "4. Deactivate TPM\n"
++                   "5. Clear ownership\n"
++                   "6. Allow installation of owner\n"
++                   "7. Prevent installation of owner\n");
++        } else {
++            printf("TPM is not working correctly.\n\n");
++        }
++
++#ifdef CONFIG_TPM_DIAGNOSTICS
++        printf("d. TPM Diagnostics\n");
++#endif
++        printf("Escape for previous menu.\n");
++
++        if (has_working_tpm()) {
++            show_tpm_state();
++        }
++
++        cfg.op = 0;
++
++        while ((scan_code = get_keystroke(1000)) == ~0)
++            ;
++
++        switch (scan_code) {
++        case 1:
++            // ESC
++            return;
++        case 2 ... 8:
++            cfg.op = scan_code - 1;
++            break;
++#ifdef CONFIG_TPM_DIAGNOSTICS
++        case 32:
++            tcpa_display_diagnostics();
++            continue;
++#endif
++        default:
++            continue;
++        }
++
++        if (has_working_tpm()) {
++            rc = tcpa_process_cfg(&cfg, 1);
++
++            if (rc)
++                printf("An error occurred: 0x%x\n", rc);
++        }
++    }
++}
++
++
++u32
++tcpa_s3_resume(void)
++{
++    u32 rc;
++    u32 returnCode;
++
++    if (!CONFIG_TCGBIOS)
++        return 0;
++
++    if (!has_working_tpm())
++        return TCG_GENERAL_ERROR;
++
++    timer_setup();
++
++    dprintf(DEBUG_tcg, "TCGBIOS: Resuming with TPM_Startup(ST_STATE)\n");
++
++    rc = build_and_send_cmd(TPM_ORD_Startup,
++                            Startup_ST_STATE, sizeof(Startup_ST_STATE),
++                            NULL, 10, &returnCode, TPM_DURATION_TYPE_SHORT);
++
++    dprintf(DEBUG_tcg, "TCGBIOS: ReturnCode from TPM_Startup = 0x%08x\n",
++            returnCode);
++
++    if (rc || returnCode)
++        goto err_exit;
++
++    return 0;
++
++err_exit:
++    dprintf(DEBUG_tcg, "TCGBIOS: TPM malfunctioning (line %d).\n", __LINE__);
++
++    tcpa_state.tpm_working = 0;
++    if (rc)
++        return rc;
++    return TCG_TCG_COMMAND_ERROR;
++}
+diff -urB --new-file a/src/tcgbios.h b/src/tcgbios.h
+--- a/src/tcgbios.h	1969-12-31 19:00:00.000000000 -0500
++++ b/src/tcgbios.h	2017-12-12 13:13:31.710846191 -0500
+@@ -0,0 +1,431 @@
++#ifndef TCGBIOS_H
++#define TCGBIOS_H
++
++#include "types.h"
++#include "bregs.h" /* struct bregs */
++
++#define TCG_MAGIC 0x41504354L
++
++/* Define for section 12.3 */
++#define TCG_PC_OK                       0x0
++#define TCG_PC_TPMERROR                 0x1
++#define TCG_PC_LOGOVERFLOW              0x2
++#define TCG_PC_UNSUPPORTED              0x3
++
++#define TPM_ALG_SHA                     0x4
++
++#define TCG_MAGIC                       0x41504354L
++#define TCG_VERSION_MAJOR               1
++#define TCG_VERSION_MINOR               2
++
++#define TPM_OK                          0x0
++#define TPM_RET_BASE                    0x1
++#define TCG_GENERAL_ERROR               (TPM_RET_BASE + 0x0)
++#define TCG_TPM_IS_LOCKED               (TPM_RET_BASE + 0x1)
++#define TCG_NO_RESPONSE                 (TPM_RET_BASE + 0x2)
++#define TCG_INVALID_RESPONSE            (TPM_RET_BASE + 0x3)
++#define TCG_INVALID_ACCESS_REQUEST      (TPM_RET_BASE + 0x4)
++#define TCG_FIRMWARE_ERROR              (TPM_RET_BASE + 0x5)
++#define TCG_INTEGRITY_CHECK_FAILED      (TPM_RET_BASE + 0x6)
++#define TCG_INVALID_DEVICE_ID           (TPM_RET_BASE + 0x7)
++#define TCG_INVALID_VENDOR_ID           (TPM_RET_BASE + 0x8)
++#define TCG_UNABLE_TO_OPEN              (TPM_RET_BASE + 0x9)
++#define TCG_UNABLE_TO_CLOSE             (TPM_RET_BASE + 0xa)
++#define TCG_RESPONSE_TIMEOUT            (TPM_RET_BASE + 0xb)
++#define TCG_INVALID_COM_REQUEST         (TPM_RET_BASE + 0xc)
++#define TCG_INVALID_ADR_REQUEST         (TPM_RET_BASE + 0xd)
++#define TCG_WRITE_BYTE_ERROR            (TPM_RET_BASE + 0xe)
++#define TCG_READ_BYTE_ERROR             (TPM_RET_BASE + 0xf)
++#define TCG_BLOCK_WRITE_TIMEOUT         (TPM_RET_BASE + 0x10)
++#define TCG_CHAR_WRITE_TIMEOUT          (TPM_RET_BASE + 0x11)
++#define TCG_CHAR_READ_TIMEOUT           (TPM_RET_BASE + 0x12)
++#define TCG_BLOCK_READ_TIMEOUT          (TPM_RET_BASE + 0x13)
++#define TCG_TRANSFER_ABORT              (TPM_RET_BASE + 0x14)
++#define TCG_INVALID_DRV_FUNCTION        (TPM_RET_BASE + 0x15)
++#define TCG_OUTPUT_BUFFER_TOO_SHORT     (TPM_RET_BASE + 0x16)
++#define TCG_FATAL_COM_ERROR             (TPM_RET_BASE + 0x17)
++#define TCG_INVALID_INPUT_PARA          (TPM_RET_BASE + 0x18)
++#define TCG_TCG_COMMAND_ERROR           (TPM_RET_BASE + 0x19)
++#define TCG_INTERFACE_SHUTDOWN          (TPM_RET_BASE + 0x20)
++//define TCG_PC_UNSUPPORTED             (TPM_RET_BASE + 0x21)
++#define TCG_PC_TPM_NOT_PRESENT          (TPM_RET_BASE + 0x22)
++#define TCG_PC_TPM_DEACTIVATED          (TPM_RET_BASE + 0x23)
++
++
++#define TPM_INVALID_ADR_REQUEST          TCG_INVALID_ADR_REQUEST
++#define TPM_IS_LOCKED                    TCG_TPM_IS_LOCKED
++#define TPM_INVALID_DEVICE_ID            TCG_INVALID_DEVICE_ID
++#define TPM_INVALID_VENDOR_ID            TCG_INVALID_VENDOR_ID
++//define TPM_RESERVED_REG_INVALID
++#define TPM_FIRMWARE_ERROR               TCG_FIRMWARE_ERROR
++#define TPM_UNABLE_TO_OPEN               TCG_UNABLE_TO_OPEN
++#define TPM_UNABLE_TO_CLOSE              TCG_UNABLE_TO_CLOSE
++#define TPM_INVALID_RESPONSE             TCG_INVALID_RESPONSE
++#define TPM_RESPONSE_TIMEOUT             TCG_RESPONSE_TIMEOUT
++#define TPM_INVALID_ACCESS_REQUEST       TCG_INVALID_ACCESS_REQUEST
++#define TPM_TRANSFER_ABORT               TCG_TRANSFER_ABORT
++#define TPM_GENERAL_ERROR                TCG_GENERAL_ERROR
++
++
++#define TPM_ORD_SelfTestFull             0x00000050
++#define TPM_ORD_ForceClear               0x0000005d
++#define TPM_ORD_GetCapability            0x00000065
++#define TPM_ORD_PhysicalEnable           0x0000006f
++#define TPM_ORD_PhysicalDisable          0x00000070
++#define TPM_ORD_SetOwnerInstall          0x00000071
++#define TPM_ORD_PhysicalSetDeactivated   0x00000072
++#define TPM_ORD_Startup                  0x00000099
++#define TPM_ORD_PhysicalPresence         0x4000000a
++#define TPM_ORD_Extend                   0x00000014
++#define TPM_ORD_SHA1Start                0x000000a0
++#define TPM_ORD_SHA1Update               0x000000a1
++#define TPM_ORD_SHA1Complete             0x000000a2
++
++
++#define TPM_ST_CLEAR                     0x1
++#define TPM_ST_STATE                     0x2
++#define TPM_ST_DEACTIVATED               0x3
++
++
++/* TPM command error codes */
++#define TPM_INVALID_POSTINIT             0x26
++
++
++/* interrupt identifiers (al register) */
++enum irq_ids {
++    TCG_StatusCheck = 0,
++    TCG_HashLogExtendEvent = 1,
++    TCG_PassThroughToTPM = 2,
++    TCG_ShutdownPreBootInterface = 3,
++    TCG_HashLogEvent = 4,
++    TCG_HashAll = 5,
++    TCG_TSS = 6,
++    TCG_CompactHashLogExtendEvent = 7,
++};
++
++/* event types: 10.4.1 / table 11 */
++#define EV_POST_CODE             1
++#define EV_SEPARATOR             4
++#define EV_ACTION                5
++#define EV_EVENT_TAG             6
++#define EV_COMPACT_HASH         12
++#define EV_IPL                  13
++#define EV_IPL_PARTITION_DATA   14
++
++
++#define STATUS_FLAG_SHUTDOWN        (1 << 0)
++
++#define SHA1_BUFSIZE                20
++
++
++struct iovec
++{
++    size_t length;
++    void   *data;
++};
++
++
++/* Input and Output blocks for the TCG BIOS commands */
++
++struct hleei_short
++{
++    u16   ipblength;
++    u16   reserved;
++    const void *hashdataptr;
++    u32   hashdatalen;
++    u32   pcrindex;
++    const void *logdataptr;
++    u32   logdatalen;
++} PACKED;
++
++
++struct hleei_long
++{
++    u16   ipblength;
++    u16   reserved;
++    void *hashdataptr;
++    u32   hashdatalen;
++    u32   pcrindex;
++    u32   reserved2;
++    void *logdataptr;
++    u32   logdatalen;
++} PACKED;
++
++
++struct hleeo
++{
++    u16    opblength;
++    u16    reserved;
++    u32    eventnumber;
++    u8     digest[SHA1_BUFSIZE];
++} PACKED;
++
++
++struct pttti
++{
++    u16    ipblength;
++    u16    reserved;
++    u16    opblength;
++    u16    reserved2;
++    u8     tpmopin[0];
++} PACKED;
++
++
++struct pttto
++{
++    u16    opblength;
++    u16    reserved;
++    u8     tpmopout[0];
++};
++
++
++struct hlei
++{
++    u16    ipblength;
++    u16    reserved;
++    const void  *hashdataptr;
++    u32    hashdatalen;
++    u32    pcrindex;
++    u32    logeventtype;
++    const void  *logdataptr;
++    u32    logdatalen;
++} PACKED;
++
++
++struct hleo
++{
++    u16    opblength;
++    u16    reserved;
++    u32    eventnumber;
++} PACKED;
++
++
++struct hai
++{
++    u16    ipblength;
++    u16    reserved;
++    const void  *hashdataptr;
++    u32    hashdatalen;
++    u32    algorithmid;
++} PACKED;
++
++
++struct ti
++{
++    u16    ipblength;
++    u16    reserved;
++    u16    opblength;
++    u16    reserved2;
++    u8     tssoperandin[0];
++} PACKED;
++
++
++struct to
++{
++    u16    opblength;
++    u16    reserved;
++    u8     tssoperandout[0];
++} PACKED;
++
++
++struct pcpes
++{
++    u32    pcrindex;
++    u32    eventtype;
++    u8     digest[SHA1_BUFSIZE];
++    u32    eventdatasize;
++    u32    event;
++} PACKED;
++
++
++/* 10.4.2.1 */
++struct pcctes
++{
++    u32 eventid;
++    u32 eventdatasize;
++    u8  digest[SHA1_BUFSIZE];
++} PACKED;
++
++/* 10.4.2.1 w/ 10.4.2.2.1 embedded */
++struct pcctes_romex
++{
++    u32 eventid;
++    u32 eventdatasize;
++    u16 reserved;
++    u16 pfa;
++    u8  digest[SHA1_BUFSIZE];
++} PACKED;
++
++
++#define TPM_REQ_HEADER \
++    u16    tag; \
++    u32    totlen; \
++    u32    ordinal;
++
++#define TPM_REQ_HEADER_SIZE  (sizeof(u16) + sizeof(u32) + sizeof(u32))
++
++#define TPM_RSP_HEADER \
++    u16    tag; \
++    u32    totlen; \
++    u32    errcode;
++
++#define TPM_RSP_HEADER_SIZE  (sizeof(u16) + sizeof(u32) + sizeof(u32))
++
++struct tpm_req_header {
++    TPM_REQ_HEADER;
++} PACKED;
++
++
++struct tpm_rsp_header {
++    TPM_RSP_HEADER;
++} PACKED;
++
++
++struct tpm_req_extend {
++    TPM_REQ_HEADER
++    u32    pcrindex;
++    u8     digest[SHA1_BUFSIZE];
++} PACKED;
++
++
++struct tpm_rsp_extend {
++    TPM_RSP_HEADER
++    u8     digest[SHA1_BUFSIZE];
++} PACKED;
++
++
++struct tpm_req_getcap_perm_flags {
++    TPM_REQ_HEADER
++    u32    capArea;
++    u32    subCapSize;
++    u32    subCap;
++} PACKED;
++
++
++struct tpm_permanent_flags {
++    u16    tag;
++    u8     flags[20];
++} PACKED;
++
++
++enum permFlagsIndex {
++    PERM_FLAG_IDX_DISABLE = 0,
++    PERM_FLAG_IDX_OWNERSHIP,
++    PERM_FLAG_IDX_DEACTIVATED,
++    PERM_FLAG_IDX_READPUBEK,
++    PERM_FLAG_IDX_DISABLEOWNERCLEAR,
++    PERM_FLAG_IDX_ALLOW_MAINTENANCE,
++    PERM_FLAG_IDX_PHYSICAL_PRESENCE_LIFETIME_LOCK,
++    PERM_FLAG_IDX_PHYSICAL_PRESENCE_HW_ENABLE,
++    PERM_FLAG_IDX_PHYSICAL_PRESENCE_CMD_ENABLE,
++};
++
++
++struct tpm_res_getcap_perm_flags {
++    TPM_RSP_HEADER
++    u32    size;
++    struct tpm_permanent_flags perm_flags;
++} PACKED;
++
++
++struct tpm_req_getcap_stclear_flags {
++    TPM_REQ_HEADER
++    u32    capArea;
++    u32    subCapSize;
++    u32    subCap;
++} PACKED;
++
++
++struct tpm_stclear_flags {
++    u16    tag;
++    u8     flags[5];
++} PACKED;
++
++
++enum stclearFlagsIndex {
++    STCLEAR_FLAG_IDX_DEACTIVATED = 0,
++    STCLEAR_FLAG_IDX_DISABLE_FORCE_CLEAR,
++    STCLEAR_FLAG_IDX_PHYSICAL_PRESENCE,
++    STCLEAR_FLAG_IDX_PHYSICAL_PRESENCE_LOCK,
++    STCLEAR_FLAG_IDX_GLOBAL_LOCK,
++};
++
++
++struct tpm_res_getcap_stclear_flags {
++    TPM_RSP_HEADER
++    u32    size;
++    struct tpm_stclear_flags stclear_flags;
++} PACKED;
++
++
++struct tpm_res_getcap_ownerauth {
++    TPM_RSP_HEADER
++    u32    size;
++    u8     flag;
++} PACKED;
++
++
++struct tpm_res_getcap_timeouts {
++    TPM_RSP_HEADER
++    u32    size;
++    u32    timeouts[4];
++} PACKED;
++
++
++struct tpm_res_getcap_durations {
++    TPM_RSP_HEADER
++    u32    size;
++    u32    durations[3];
++} PACKED;
++
++
++struct tpm_res_sha1start {
++    TPM_RSP_HEADER
++    u32    max_num_bytes;
++} PACKED;
++
++
++struct tpm_res_sha1complete {
++    TPM_RSP_HEADER
++    u8     hash[20];
++} PACKED;
++
++struct pttti_extend {
++    struct pttti pttti;
++    struct tpm_req_extend req;
++} PACKED;
++
++
++struct pttto_extend {
++    struct pttto pttto;
++    struct tpm_rsp_extend rsp;
++} PACKED;
++
++
++enum ipltype {
++    IPL_BCV = 0,
++    IPL_EL_TORITO_1,
++    IPL_EL_TORITO_2
++};
++
++
++void tcpa_interrupt_handler32(struct bregs *regs);
++void _cfunc32flat_tcpa_interrupt_handler32(struct bregs *regs);
++
++void tcpa_acpi_init(void);
++int detected_tpm(void);
++u32 tcpa_startup(void);
++u32 tcpa_leave_bios(void);
++u32 tcpa_s3_resume(void);
++u32 tcpa_calling_int19h(void);
++u32 tcpa_returned_via_int18h(void);
++u32 tcpa_add_bootdevice(u32 bootcd, u32 bootdrv);
++u32 tcpa_add_event_separators(void);
++u32 tcpa_ipl(enum ipltype bootcd, const u8 *addr, u32 count);
++u32 tcpa_start_option_rom_scan(void);
++u32 tcpa_option_rom(const void *addr, u32 len);
++u32 tcpa_smbios_measure(void);
++void tcpa_menu(void);
++
++
++#endif /* TCGBIOS_H */
+diff -urB --new-file a/src/util.h b/src/util.h
+--- a/src/util.h	2014-05-28 08:09:15.000000000 -0400
++++ b/src/util.h	2017-12-12 13:15:28.207665800 -0500
+@@ -36,6 +36,7 @@
+ int bootprio_find_named_rom(const char *name, int instance);
+ struct usbdevice_s;
+ int bootprio_find_usb(struct usbdevice_s *usbdev, int lun);
++int get_keystroke(int msec);
+ 
+ // bootsplash.c
+ void enable_vga_console(void);
+@@ -76,6 +77,7 @@
+ void acpi_reboot(void);
+ void find_acpi_features(void);
+ extern struct smbios_entry_point *SMBiosAddr;
++struct smbios_entry_point *get_smbios_entry_point();
+ void copy_smbios(void *pos);
+ void display_uuid(void);
+ void copy_table(void *pos);
+@@ -234,4 +236,34 @@
+ // version (auto generated file out/version.c)
+ extern const char VERSION[];
+ 
++
++static inline u32 rol(u32 val, u16 rol)
++{
++    u32 res;
++
++    __asm__ __volatile__ ("rol %%cl, %%eax"
++                          : "=a" (res)
++                          : "a" (val), "c" (rol));
++
++    return res;
++}
++
++
++static inline u64 bswap_64(u64 val)
++{
++    u32 hi = (u32)(val >> 32);
++    u32 lo = (u32)val;
++
++    __asm__ __volatile__ ("bswap %%eax"
++                          : "=a" (lo)
++                          : "a" (lo));
++
++    __asm__ __volatile__ ("bswap %%eax"
++                          : "=a" (hi)
++                          : "a" (hi));
++
++    return ((u64)lo << 32 | hi);
++}
++
++
+ #endif // util.h

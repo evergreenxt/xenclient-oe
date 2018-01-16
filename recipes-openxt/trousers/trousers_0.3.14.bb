@@ -18,13 +18,8 @@ S = "${WORKDIR}/${PN}-${PV}"
 EXTRA_OECONF += " --disable-usercheck"
 CFLAGS_append = " -Wno-error=unused-parameter -Wno-error=strict-aliasing -std=gnu89"
 
-inherit update-rc.d useradd autotools-brokensep pkgconfig
+inherit useradd autotools-brokensep pkgconfig
 
-
-INITSCRIPT_PACKAGES = "${PN}"
-
-INITSCRIPT_NAME_${PN} = "trousers"
-INITSCRIPT_PARAMS_${PN} = "defaults 85"
 
 USERADD_PACKAGES = "${PN}"
 GROUPADD_PARAM_${PN} = "--gid 421 tss"

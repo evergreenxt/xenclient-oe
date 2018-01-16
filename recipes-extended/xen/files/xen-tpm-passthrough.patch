@@ -1,0 +1,41 @@
+diff -ur a/tools/libacpi/build.c b/tools/libacpi/build.c
+--- a/tools/libacpi/build.c	2017-06-27 14:13:19.000000000 -0400
++++ b/tools/libacpi/build.c	2017-12-12 15:11:15.275857231 -0500
+@@ -351,7 +351,7 @@
+     struct acpi_20_waet *waet;
+     struct acpi_20_tcpa *tcpa;
+     unsigned char *ssdt;
+-    static const uint16_t tis_signature[] = {0x0001, 0x0001, 0x0001};
++    static const uint16_t tis_signature[] = {0x1014, 0x0001, 0x0001};
+     void *lasa;
+ 
+     /* MADT. */
+@@ -423,6 +423,7 @@
+          (config->tis_hdr[1] == tis_signature[1]) &&
+          (config->tis_hdr[2] == tis_signature[2]) )
+     {
++        printf("TPM Enabled\n");
+         ssdt = ctxt->mem_ops.alloc(ctxt, sizeof(ssdt_tpm), 16);
+         if (!ssdt) return -1;
+         memcpy(ssdt, ssdt_tpm, sizeof(ssdt_tpm));
+@@ -450,6 +451,8 @@
+                          offsetof(struct acpi_header, checksum),
+                          tcpa->header.length);
+         }
++    } else {
++        printf("TPM Disabled\n");
+     }
+ 
+     /* SRAT and SLIT */
+diff -ur a/tools/libacpi/ssdt_tpm.asl b/tools/libacpi/ssdt_tpm.asl
+--- a/tools/libacpi/ssdt_tpm.asl	2017-06-27 14:13:19.000000000 -0400
++++ b/tools/libacpi/ssdt_tpm.asl	2017-12-12 15:12:09.860298686 -0500
+@@ -24,5 +24,8 @@
+         {
+             Memory32Fixed (ReadWrite, 0xFED40000, 0x5000,)
+         })
++        Method (_STA, 0, NotSerialized) {
++            Return (0x0F)
++        }
+     }
+ }
