@@ -4,7 +4,7 @@ LICENSE = "LGPLv3"
 SECTION = "firmware"
 
 SRC_URI = " \
-    https://www.seabios.org/downloads/${PN}-${PV}.tar.gz \
+    https://www.seabios.org/downloads/${PN}-${PV}.tar.gz;name=tarball \
 "
 
 S = "${WORKDIR}/${PN}-${PV}"
