@@ -13,6 +13,7 @@ SRC_URI = "git://${OPENXT_GIT_MIRROR}/input.git;protocol=${OPENXT_GIT_PROTOCOL};
 "
 
 EXTRA_OECONF += "--with-idldir=${STAGING_IDLDIR}"
+EXTRA_OECONF += "--with-rpcgen-templates=${STAGING_DATADIR_NATIVE}/xc-rpcgen-1.0/templates"
 
 CFLAGS_append += " -Wno-unused-parameter -Wno-deprecated-declarations "
 
