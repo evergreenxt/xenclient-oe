@@ -24,9 +24,9 @@ SRC_URI = "git://${OPENXT_GIT_MIRROR}/toolstack-data.git;protocol=${OPENXT_GIT_P
 
 S = "${WORKDIR}/git"
 OUTPUT_DIR = "${S}/dist/script/services"
-IDL_DIR = "${STAGING_DATADIR}/idl"
+STAGING_IDLDATADIR = "${STAGING_DATADIR}/idl"
 
-export IDL_DIR
+export STAGING_IDLDATADIR
 
 inherit xenclient
 
