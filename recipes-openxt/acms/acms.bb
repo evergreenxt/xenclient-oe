@@ -27,6 +27,8 @@ SRC_URI[skl.md5sum] = "b07b5fb355815655be14c84df84a69a5"
 SRC_URI[skl.sha256sum] = "9f7b17dfb87719dc7c789d7e319071a0fbcca5b547bfd8b2aa3bf253760e23c6"
 SRC_URI[kbl.md5sum] = "542133cb3e6911bda1e83d27fc0872b2"
 SRC_URI[kbl.sha256sum] = "a3ea9055c27481ed48e5ce8b7e02d37e8d27cff4fd1cf911ff219b8e210ccfaf"
+SRC_URI[cfl.md5sum] = "b46e104a739a553e30c48e91c3649b7d"
+SRC_URI[cfl.sha256sum] = "401c29887bb6abfa1f3c90ce03e550fd0cf23892aa97bdfab34b7aa2bdc72976"
 
 PR="r3"
 LICENSE = "Intel-ACMs"
@@ -41,20 +43,25 @@ LIC_FILES_CHKSUM = "file://GM45_GS45_PM45-SINIT_51/license.txt;md5=60d123634e0b9
                     file://5th_gen_i5_i7-SINIT_79/license.txt;md5=68248a22232ba4fd23010e9c65209406 \
                     file://6th_gen_i5_i7-SINIT_71/license.txt;md5=1d626a5a455fd0bff690b866040198c2 \
                     file://7th_gen_i5_i7-SINIT_74/license.txt;md5=4897766beede80773ddd162b2724a8bb \
+                    file://8th_gen_i5_i7-SINIT_76/license.txt;md5=24983614c000aac0d87e5aea9d13b8be \
 "
 
-SRC_URI = "${OPENXT_MIRROR}/GM45_GS45_PM45-SINIT_51.zip;name=gm45 \
-           ${OPENXT_MIRROR}/Q45_Q43-SINIT_51.zip;name=q45 \
-           ${OPENXT_MIRROR}/Q35-SINIT_51.zip;name=q35 \
-           ${OPENXT_MIRROR}/i5_i7_DUAL-SINIT_51.zip;name=i5 \
-           ${OPENXT_MIRROR}/i7_QUAD-SINIT_51.zip;name=i7 \
-           ${OPENXT_MIRROR}/Xeon-5600-3500-SINIT-v1.1.zip;name=xeon_5600 \
-           ${OPENXT_MIRROR}/Xeon-E7-8800-4800-2800-SINIT-v1.1.zip;name=xeon_e7 \
-           ${OPENXT_MIRROR}/3rd-gen-i5-i7-sinit-67.zip;name=ivb_snb \
-           ${OPENXT_MIRROR}/4th-gen-i5-i7-sinit-75.zip;name=hsw \
-           ${OPENXT_MIRROR}/5th_gen_i5_i7-SINIT_79.zip;name=bdw \
-           ${OPENXT_MIRROR}/6th_gen_i5_i7-SINIT_71.zip;name=skl \
-           ${OPENXT_MIRROR}/7th_gen_i5_i7-SINIT_74.zip;name=kbl \
+MIRRORS_append += " \
+    http://.*/.*    https://openxt.ainfosec.com/mirror/ \
+"
+SRC_URI = "${OPENXT_MIRROR}/openxt/GM45_GS45_PM45-SINIT_51.zip;name=gm45 \
+           ${OPENXT_MIRROR}/openxt/Q45_Q43-SINIT_51.zip;name=q45 \
+           ${OPENXT_MIRROR}/openxt/Q35-SINIT_51.zip;name=q35 \
+           ${OPENXT_MIRROR}/openxt/i5_i7_DUAL-SINIT_51.zip;name=i5 \
+           ${OPENXT_MIRROR}/openxt/i7_QUAD-SINIT_51.zip;name=i7 \
+           ${OPENXT_MIRROR}/openxt/Xeon-5600-3500-SINIT-v1.1.zip;name=xeon_5600 \
+           ${OPENXT_MIRROR}/openxt/Xeon-E7-8800-4800-2800-SINIT-v1.1.zip;name=xeon_e7 \
+           ${OPENXT_MIRROR}/openxt/3rd-gen-i5-i7-sinit-67.zip;name=ivb_snb \
+           ${OPENXT_MIRROR}/openxt/4th-gen-i5-i7-sinit-75.zip;name=hsw \
+           ${OPENXT_MIRROR}/openxt/5th_gen_i5_i7-SINIT_79.zip;name=bdw \
+           ${OPENXT_MIRROR}/openxt/6th_gen_i5_i7-SINIT_71.zip;name=skl \
+           ${OPENXT_MIRROR}/openxt/7th_gen_i5_i7-SINIT_74.zip;name=kbl \
+           ${OPENXT_MIRROR}/openxt/8th_gen_i5_i7-SINIT_76.zip;name=cfl \
 "
 
 FILES_${PN} = "/boot"
@@ -69,6 +76,6 @@ do_install() {
         done
 
         # After inspection of the licenses of the individual ACM files,
-        # the most recent KabyLake license is sufficient to cover all:
-        install -m 444 7th_gen_i5_i7-SINIT_74/license.txt ${D}/boot/license-SINIT-ACMs.txt
+        # the most recent Coffee Lake license is sufficient to cover all:
+        install -m 444 8th_gen_i5_i7-SINIT_76/license.txt ${D}/boot/license-SINIT-ACMs.txt
 }

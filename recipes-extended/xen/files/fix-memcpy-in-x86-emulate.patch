@@ -34,11 +34,9 @@ INTERNAL DEPENDENCIES
 ################################################################################
 PATCHES 
 ################################################################################
-Index: xen-4.9.0/xen/arch/x86/hvm/hvm.c
-===================================================================
---- xen-4.9.0.orig/xen/arch/x86/hvm/hvm.c
-+++ xen-4.9.0/xen/arch/x86/hvm/hvm.c
-@@ -3065,6 +3065,37 @@ void hvm_task_switch(
+--- a/xen/arch/x86/hvm/hvm.c
++++ b/xen/arch/x86/hvm/hvm.c
+@@ -3071,6 +3071,37 @@ void hvm_task_switch(
      hvm_unmap_entry(nptss_desc);
  }
  
@@ -76,7 +74,7 @@ Index: xen-4.9.0/xen/arch/x86/hvm/hvm.c
  #define HVMCOPY_from_guest (0u<<0)
  #define HVMCOPY_to_guest   (1u<<0)
  #define HVMCOPY_phys       (0u<<2)
-@@ -3174,9 +3205,9 @@ static enum hvm_copy_result __hvm_copy(
+@@ -3180,9 +3211,9 @@ static enum hvm_copy_result __hvm_copy(
              else
              {
                  if ( buf )
@@ -88,11 +86,9 @@ Index: xen-4.9.0/xen/arch/x86/hvm/hvm.c
                  paging_mark_dirty(v->domain, _mfn(page_to_mfn(page)));
              }
          }
-Index: xen-4.9.0/xen/arch/x86/mm/shadow/multi.c
-===================================================================
---- xen-4.9.0.orig/xen/arch/x86/mm/shadow/multi.c
-+++ xen-4.9.0/xen/arch/x86/mm/shadow/multi.c
-@@ -4741,6 +4741,26 @@ static void emulate_unmap_dest(struct vc
+--- a/xen/arch/x86/mm/shadow/multi.c
++++ b/xen/arch/x86/mm/shadow/multi.c
+@@ -4770,6 +4770,26 @@ static void emulate_unmap_dest(struct vc
      sh_emulate_unmap_dest(v, addr, bytes, sh_ctxt);
  }
  
@@ -119,7 +115,7 @@ Index: xen-4.9.0/xen/arch/x86/mm/shadow/multi.c
  static int
  sh_x86_emulate_write(struct vcpu *v, unsigned long vaddr, void *src,
                       u32 bytes, struct sh_emulate_ctxt *sh_ctxt)
-@@ -4756,7 +4776,7 @@ sh_x86_emulate_write(struct vcpu *v, uns
+@@ -4785,7 +4805,7 @@ sh_x86_emulate_write(struct vcpu *v, uns
          return (long)addr;
  
      paging_lock(v->domain);

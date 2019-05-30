@@ -7,8 +7,6 @@ DEPENDS = " \
     libxchxenstore \
     libxchutils \
     xen \
-    xenclient-rpcgen-native \
-    xenclient-idl \
     hkg-hsyslog \
     hkg-network \
     hkg-monadprompt \
@@ -37,22 +35,22 @@ SRC_URI = " \
 
 S = "${WORKDIR}/git/updatemgr"
 
-inherit update-rc.d haskell
+inherit update-rc.d haskell xc-rpcgen
 
 INITSCRIPT_PACKAGES = "${PN}"
 INITSCRIPT_NAME_${PN} = "updatemgr"
-INITSCRIPT_PARAMS_${PN} = "start 80 5 . stop 01 0 1 6 ."
+INITSCRIPT_PARAMS_${PN} = "defaults 80"
 
 do_configure_append() {
 	# generate rpc stubs
 	mkdir -p ${S}/Rpc/Autogen
 	# Server objects
-	xc-rpcgen --haskell -s -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_DATADIR}/idl/updatemgr.xml
+	xc-rpcgen --haskell --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -s -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_IDLDATADIR}/updatemgr.xml
 	# Client objects
-	xc-rpcgen --haskell -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_DATADIR}/idl/db.xml
-	xc-rpcgen --haskell -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_DATADIR}/idl/xenmgr.xml
-	xc-rpcgen --haskell -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_DATADIR}/idl/xenmgr_vm.xml
-	xc-rpcgen --haskell -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_DATADIR}/idl/xenmgr_host.xml
+	xc-rpcgen --haskell --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_IDLDATADIR}/db.xml
+	xc-rpcgen --haskell --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_IDLDATADIR}/xenmgr.xml
+	xc-rpcgen --haskell --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_IDLDATADIR}/xenmgr_vm.xml
+	xc-rpcgen --haskell --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -c -o ${S}/Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_IDLDATADIR}/xenmgr_host.xml
 }
 
 do_install_append() {

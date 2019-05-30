@@ -28,8 +28,7 @@ PACKAGES = " \
     "
 
 FILES_xen-efi = "\
-    ${exec_prefix}/lib64 \
-    ${exec_prefix}/lib64/xen* \
+    /boot/xen.efi \
     "
 
 PROVIDES_xen-efi = "xen-efi"
@@ -67,28 +66,32 @@ EXTRA_OEMAKE += " \
     "
 
 do_configure() {
-
-    echo "debug := n" > .config
-    echo "XSM_ENABLE := y" >> .config
-    echo "FLASK_ENABLE := y" >> .config
-
     cp "${WORKDIR}/defconfig" "${B}/xen/.config"
-
-    # do configure
     oe_runconf
 }
 
 do_compile() {
     unset CFLAGS
+    export CC="${HOST_PREFIX}gcc ${TOOLCHAIN_OPTIONS}"
+    export CPP="${HOST_PREFIX}cpp ${TOOLCHAIN_OPTIONS}"
+
     oe_runmake -C xen olddefconfig
-    oe_runmake -C xen
+    # public/v4v.h is not compliant at all, headers++.chk will fail trying as
+    # it tries to include <xen/xen.h> (which is not present...).
+    # By-pass the problem by CXX=/bin/false, not generating headers++.chk.
+    oe_runmake CXX=/bin/false dist-xen
 }
 
 do_install() {
     unset CFLAGS
+    export CC="${HOST_PREFIX}gcc ${TOOLCHAIN_OPTIONS}"
+    export CPP="${HOST_PREFIX}cpp ${TOOLCHAIN_OPTIONS}"
     install -d ${D}/boot
     oe_runmake DESTDIR=${D} install-xen
     ln -sf "`basename ${D}/boot/xen-*xc.gz`" ${D}/boot/xen-debug.gz
+    install -m 600 ${B}/xen/xen.efi ${D}/boot/
+
+    rm -rf ${D}/usr/lib64
 }
 
 RPROVIDES_xen-efi = "xen-efi"

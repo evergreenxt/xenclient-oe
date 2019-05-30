@@ -1,0 +1,38 @@
+--- a/policy/modules/system/modutils.te
++++ b/policy/modules/system/modutils.te
+@@ -71,6 +71,7 @@ allow kmod_t kmod_var_run_t:dir manage_d
+ allow kmod_t kmod_var_run_t:file manage_file_perms;
+ 
+ dev_rw_sysfs(kmod_t)
++dev_mount_usbfs(kmod_t)
+ dev_search_usbfs(kmod_t)
+ dev_rw_mtrr(kmod_t)
+ dev_read_urand(kmod_t)
+@@ -105,12 +106,16 @@ logging_search_logs(kmod_t)
+ 
+ miscfiles_read_localization(kmod_t)
+ 
++selinux_mount_fs(kmod_t)
+ seutil_read_file_contexts(kmod_t)
+ 
+ userdom_use_user_terminals(kmod_t)
+ 
+ userdom_dontaudit_search_user_home_dirs(kmod_t)
+ 
++# OpenXT: the txt module searches the securityfs at init time
++selinux_search_fs(kmod_t)
++
+ ifdef(`init_systemd',`
+ 	init_rw_stream_sockets(kmod_t)
+ 
+@@ -135,6 +140,10 @@ optional_policy(`
+ ')
+ 
+ optional_policy(`
++       iptables_dontaudit_read_pids(kmod_t)
++')
++
++optional_policy(`
+ 	mount_domtrans(kmod_t)
+ ')
+ 

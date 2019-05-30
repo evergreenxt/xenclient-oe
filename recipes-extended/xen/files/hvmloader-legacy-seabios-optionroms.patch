@@ -33,10 +33,8 @@ INTERNAL DEPENDENCIES
 ################################################################################
 PATCHES 
 ################################################################################
-Index: xen-4.9.0/tools/firmware/Makefile
-===================================================================
---- xen-4.9.0.orig/tools/firmware/Makefile
-+++ xen-4.9.0/tools/firmware/Makefile
+--- a/tools/firmware/Makefile
++++ b/tools/firmware/Makefile
 @@ -7,7 +7,7 @@ INST_DIR := $(DESTDIR)$(XENFIRMWAREDIR)
  
  SUBDIRS-y :=
@@ -46,10 +44,31 @@ Index: xen-4.9.0/tools/firmware/Makefile
  SUBDIRS-$(CONFIG_ROMBIOS) += rombios
  SUBDIRS-$(CONFIG_ROMBIOS) += vgabios
  SUBDIRS-$(CONFIG_ROMBIOS) += etherboot
-Index: xen-4.9.0/tools/firmware/hvmloader/Makefile
-===================================================================
---- xen-4.9.0.orig/tools/firmware/hvmloader/Makefile
-+++ xen-4.9.0/tools/firmware/hvmloader/Makefile
+@@ -16,11 +16,11 @@ SUBDIRS-y += hvmloader
+ LD32BIT-$(CONFIG_FreeBSD) := LD32BIT_FLAG=-melf_i386_fbsd
+ 
+ ovmf-dir:
+-	GIT=$(GIT) $(XEN_ROOT)/scripts/git-checkout.sh $(OVMF_UPSTREAM_URL) $(OVMF_UPSTREAM_REVISION) ovmf-dir
++	GIT="$(GIT)" $(XEN_ROOT)/scripts/git-checkout.sh $(OVMF_UPSTREAM_URL) $(OVMF_UPSTREAM_REVISION) ovmf-dir
+ 	cp ovmf-makefile ovmf-dir/Makefile;
+ 
+ seabios-dir:
+-	GIT=$(GIT) $(XEN_ROOT)/scripts/git-checkout.sh $(SEABIOS_UPSTREAM_URL) $(SEABIOS_UPSTREAM_REVISION) seabios-dir
++	GIT="$(GIT)" $(XEN_ROOT)/scripts/git-checkout.sh $(SEABIOS_UPSTREAM_URL) $(SEABIOS_UPSTREAM_REVISION) seabios-dir
+ 	cp seabios-config seabios-dir/.config;
+ 	$(MAKE) -C seabios-dir olddefconfig
+ 
+@@ -35,7 +35,7 @@ ifeq ($(CONFIG_ROMBIOS),y)
+ 	false ; \
+ 	fi
+ endif
+-	$(MAKE) $(LD32BIT-y) CC=$(CC) PYTHON=$(PYTHON) subdirs-$@
++	$(MAKE) $(LD32BIT-y) CC="$(CC)" PYTHON="$(PYTHON)" subdirs-$@
+ 
+ 
+ .PHONY: install
+--- a/tools/firmware/hvmloader/Makefile
++++ b/tools/firmware/hvmloader/Makefile
 @@ -35,7 +35,7 @@ OBJS  = hvmloader.o mp_tables.o util.o s
  OBJS += smp.o cacheattr.o xenbus.o vnuma.o
  OBJS += e820.o pci.o pir.o ctype.o
@@ -67,10 +86,8 @@ Index: xen-4.9.0/tools/firmware/hvmloader/Makefile
  smbios.o: CFLAGS += -D__SMBIOS_DATE__="\"$(SMBIOS_REL_DATE)\""
  
  ACPI_PATH = ../../libacpi
-Index: xen-4.9.0/tools/firmware/hvmloader/mkhex
-===================================================================
---- xen-4.9.0.orig/tools/firmware/hvmloader/mkhex
-+++ xen-4.9.0/tools/firmware/hvmloader/mkhex
+--- a/tools/firmware/hvmloader/mkhex
++++ b/tools/firmware/hvmloader/mkhex
 @@ -19,7 +19,7 @@
  # this program; If not, see <http://www.gnu.org/licenses/>.
  #
@@ -80,10 +97,8 @@ Index: xen-4.9.0/tools/firmware/hvmloader/mkhex
  shift
  od -v -t x $@ | sed 's/^[0-9]*  */0x/' | sed 's/  */, 0x/g' | sed 's/$/,/' | sed 's/0x,//' | sed 's/^[0-9]*,//'
  echo "};"
-Index: xen-4.9.0/tools/firmware/hvmloader/seabios.c
-===================================================================
---- xen-4.9.0.orig/tools/firmware/hvmloader/seabios.c
-+++ xen-4.9.0/tools/firmware/hvmloader/seabios.c
+--- a/tools/firmware/hvmloader/seabios.c
++++ b/tools/firmware/hvmloader/seabios.c
 @@ -25,10 +25,22 @@
  #include "util.h"
  

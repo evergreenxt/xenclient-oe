@@ -1,8 +1,7 @@
-inherit findlib
 DESCRIPTION = "db tools"
 LICENSE = "GPLv2"
 LIC_FILES_CHKSUM="file://../COPYING;md5=4641e94ec96f98fabc56ff9cc48be14b"
-DEPENDS = "xenclient-rpcgen-native xenclient-idl ocaml-dbus xenclient-toolstack xen-ocaml-libs"
+DEPENDS = "ocaml-dbus xenclient-toolstack xen-ocaml-libs"
 
 DEPENDS_append_xenclient-nilfvm += " ${@deb_bootstrap_deps(d)} "
 
@@ -23,11 +22,8 @@ SRC_URI += " file://db-exists-dom0 \
 
 S = "${WORKDIR}/git/dbd"
 
-inherit xenclient
+inherit xenclient ocaml findlib xc-rpcgen
 inherit ${@"xenclient-simple-deb"if(d.getVar("MACHINE",1)=="xenclient-nilfvm")else("null")}
-
-FILES_${PN} = " /usr/bin/db-cmd /usr/bin/db-ls /usr/bin/db-read /usr/bin/db-write /usr/bin/db-nodes /usr/bin/db-exists /usr/bin/db-rm /usr/bin/db-cat "
-FILES_${PN} += " /usr/bin/db-ls-dom0 /usr/bin/db-read-dom0 /usr/bin/db-write-dom0 /usr/bin/db-nodes-dom0 /usr/bin/db-exists-dom0 /usr/bin/db-rm-dom0 /usr/bin/db-cat-dom0 "
 
 DEB_SUITE = "wheezy"
 DEB_ARCH = "i386"
@@ -40,7 +36,7 @@ DEB_PKG_MAINTAINER = "Citrix Systems <customerservice@citrix.com>"
 
 do_configure_append() {
 	mkdir -p ${S}/autogen
-	xc-rpcgen --camel -c -o ${S}/autogen ${STAGING_DATADIR}/idl/db.xml
+	xc-rpcgen --camel --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -c -o ${S}/autogen ${STAGING_IDLDATADIR}/db.xml
 }
 
 do_compile() {
@@ -50,10 +46,13 @@ do_compile() {
 }
 
 do_install() {
+	# findlib.bbclass will create ${D}${sitelibdir} for generic ocamlfind
+	# compliance with bitbake. This does not ship any library though.
+	rm -rf ${D}${libdir}
+
 	install -m 0755 -d ${D}/usr/bin
 
         install -m 0755 db-cmd ${D}/usr/bin/db-cmd
-        ${STRIP} ${D}/usr/bin/db-cmd
 
         install -m 0755 db-exists ${D}/usr/bin/db-exists
         install -m 0755 db-ls ${D}/usr/bin/db-ls
@@ -74,10 +73,13 @@ do_install() {
 
 # Had to duplicate, can't _append as xenclient-deb overrides it
 do_install_xenclient-nilfvm() {
+	# findlib.bbclass will create ${D}${sitelibdir} for generic ocamlfind
+	# compliance with bitbake. This does not ship any library though.
+	rm -rf ${D}${libdir}
+
         install -m 0755 -d ${D}/usr/bin
 
         install -m 0755 db-cmd ${D}/usr/bin/db-cmd
-        ${STRIP} ${D}/usr/bin/db-cmd
 
         install -m 0755 db-exists ${D}/usr/bin/db-exists
         install -m 0755 db-ls ${D}/usr/bin/db-ls

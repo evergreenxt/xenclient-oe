@@ -11,13 +11,11 @@ RDEPENDS_${PN} = " \
     openssh-sshd-tcp-init \
     util-linux-mount \
     util-linux-umount \
-    xen-blktap \
     xen-console \
     xen-hvmloader \
     xen-hypervisor \
+    xen-efi \
     xen-flask-tools \
-    xen-libblktapctl \
-    xen-libvhd \
     xen-libxenctrl \
     xen-libxenguest \
     xen-libxenlight \
@@ -29,6 +27,7 @@ RDEPENDS_${PN} = " \
     xen-xl \
     xen-xsm-policy \
     grub \
+    shim \
     tboot \
     tboot-utils \
     e2fsprogs-tune2fs \
@@ -44,7 +43,7 @@ RDEPENDS_${PN} = " \
     qemu-dm \
     seabios \
     xcpmd \
-    vbetool-xc \
+    vbetool \
     xenclient-toolstack \
     xenclient-input-daemon \
     xenclient-dom0-tweaks \
@@ -76,7 +75,6 @@ RDEPENDS_${PN} = " \
     pmtools \
     svirt-interpose \
     selinux-load \
-    ustr \
     ethtool \
     intel-microcode \
     rsyslog \
@@ -116,11 +114,12 @@ RDEPENDS_${PN} = " \
     dm-agent \
     xenmgr \
     xen-xenstore \
-    xen-xenstored-c \
     libtss2 \
     libtctidevice \
     libtctisocket \
     tpm2-tools \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', 'xen-blktap xen-libblktapctl xen-libvhd', 'blktap3', d)} \
+    pesign \
 "
 
 # OE upgrade - temporarly disabled:

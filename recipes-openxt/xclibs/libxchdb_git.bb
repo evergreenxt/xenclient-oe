@@ -15,9 +15,9 @@ HPN = "xchdb"
 HPV = "0.1"
 
 require xclibs.inc
-inherit haskell
+inherit haskell xc-rpcgen
 
 do_configure_append() {
     mkdir -p Rpc/Autogen
-    xc-rpcgen --haskell -c -o Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_DATADIR}/idl/db.xml
+    xc-rpcgen --haskell --templates-dir=${STAGING_RPCGENDATADIR_NATIVE} -c -o Rpc/Autogen --module-prefix=Rpc.Autogen ${STAGING_IDLDATADIR}/db.xml
 }

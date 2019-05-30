@@ -1,8 +1,6 @@
 require recipes-extended/xen/xen.inc
 require xen-common.inc
 
-inherit findlib
-
 DESCRIPTION = "Xen hypervisor libxl components"
 
 # In OpenXT, multiple recipes are used to build Xen and its components:
@@ -34,9 +32,18 @@ python () {
 DEPENDS += " \
     util-linux \
     xen \
-    xen-blktap \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', 'xen-blktap', 'blktap3', d)} \
     libnl \
     "
+
+RDEPENDS_${PN}-base_remove = " \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '${PN}-blktap ${PN}-libblktapctl ${PN}-libvhd', d)} \
+    "
+
+RRECOMMENDS_${PN}-base_remove = " \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '${PN}-libblktap', d)} \
+    "
+
 SRC_URI_append = " \
     file://xen-init-dom0.initscript \
     file://xl.conf \
@@ -53,6 +60,10 @@ PACKAGES = " \
     ${PN}-dbg \
     "
 
+PACKAGES_remove = " \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '${PN}-blktap ${PN}-libblktap ${PN}-libblktapctl ${PN}-libblktapctl-dev ${PN}-libblktap-dev', d)} \
+    "
+
 FILES_${PN}-staticdev = " \
     ${libdir}/libxlutil.a \
     ${libdir}/libxenlight.a \
@@ -60,6 +71,17 @@ FILES_${PN}-staticdev = " \
 FILES_xen-libxlutil += " \
     ${sysconfdir}/xen/xl.conf \
 "
+FILES_${PN}-dev += " \
+    ${includedir} \
+"
+FILES_${PN}-dbg += " \
+    ${bindir}/.debug \
+    ${sbindir}/.debug \
+    ${libdir}/.debug \
+    /usr/src/debug \
+"
+
+CFLAGS_prepend += "${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '-I${STAGING_INCDIR}/blktap',d)}"
 
 EXTRA_OEMAKE += "CROSS_SYS_ROOT=${STAGING_DIR_HOST} CROSS_COMPILE=${HOST_PREFIX}"
 EXTRA_OEMAKE += "CONFIG_IOEMU=n"
@@ -77,16 +99,14 @@ FULL_OPTIMIZATION = "-pipe ${DEBUG_FLAGS}"
 TARGET_CC_ARCH += "${LDFLAGS}"
 CC_FOR_OCAML="i686-oe-linux-gcc"
 
-INITSCRIPT_PACKAGES = "xen-xl xen-xenstored-ocaml"
+INITSCRIPT_PACKAGES = "xen-xl"
 INITSCRIPT_NAME_xen-xl = "xen-init-dom0"
 INITSCRIPT_PARAMS_xen-xl = "defaults 21"
-INITSCRIPT_NAME_xen-xenstored-ocaml = "xenstored"
-INITSCRIPT_PARAMS_xen-xenstored-ocaml = "defaults 05"
 
 do_configure_prepend() {
 	#remove optimizations in the config files
-	sed -i 's/-O2//g' ${WORKDIR}/xen-${XEN_VERSION}/Config.mk
-	sed -i 's/-O2//g' ${WORKDIR}/xen-${XEN_VERSION}/config/StdGNU.mk
+	sed -i 's/-O2//g' ${S}/Config.mk
+	sed -i 's/-O2//g' ${S}/config/StdGNU.mk
 }
 
 do_compile() {

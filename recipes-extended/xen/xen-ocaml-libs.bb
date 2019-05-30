@@ -1,7 +1,7 @@
 require recipes-extended/xen/xen.inc
 require xen-common.inc
 
-inherit findlib
+inherit ocaml findlib
 
 DESCRIPTION = "Xen hypervisor ocaml libs and xenstore components"
 
@@ -13,17 +13,24 @@ FILES_xen-xenstored-ocaml = " \
     ${sysconfdir}/init.d/xenstored.xen-xenstored-ocaml \
     ${sysconfdir}/xen/oxenstored.conf \
     "
-
-PROVIDES =+ "xen-xenstored xen-xenstored-ocaml"
-RPROVIDES_xen-xenstored-ocaml = "xen-xenstored xen-xenstored-ocaml"
+PROVIDES =+ "xen-xenstored-ocaml"
+RPROVIDES_${PN}-xenstored-ocaml = "xen-xenstored"
 
 DEPENDS += " \
     util-linux \
     xen \
-    xen-blktap \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', 'xen-blktap', 'blktap3', d)} \
     libnl \
-    ocaml-cross \
     "
+
+RDEPENDS_${PN}-base_remove = " \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '${PN}-blktap ${PN}-libblktapctl ${PN}-libvhd', d)} \
+    "
+
+RRECOMMENDS_${PN}-base_remove = " \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '${PN}-libblktap', d)} \
+    "
+
 EXTRA_OECONF_remove = "--disable-ocamltools"
 
 SRC_URI_append = " \
@@ -39,14 +46,18 @@ PACKAGES = " \
     ${PN} \
     "
 
-FILES_${PN}-dev = "${ocamllibdir}/*/*.so"
-FILES_${PN}-dbg += "${ocamllibdir}/*/.debug/*"
-FILES_${PN}-staticdev = "${ocamllibdir}/*/*.a"
-FILES_${PN} = "${ocamllibdir}/*"
+PACKAGES_remove = " \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', '', '${PN}-blktap ${PN}-libblktap ${PN}-libblktapctl ${PN}-libblktapctl-dev ${PN}-libblktap-dev', d)} \
+    "
+
+CFLAGS_prepend += " -I${STAGING_INCDIR}/blktap "
 
 EXTRA_OEMAKE += "CROSS_SYS_ROOT=${STAGING_DIR_HOST} CROSS_COMPILE=${HOST_PREFIX}"
 EXTRA_OEMAKE += "CONFIG_IOEMU=n"
 EXTRA_OEMAKE += "DESTDIR=${D}"
+# OCAMLDESTDIR is set to $DESTDIR/$(ocamlfind printconf destdir), yet DESTDIR
+# is required for other binaries installation, so override OCAMLDESTDIR.
+EXTRA_OEMAKE += "OCAMLDESTDIR=${D}${sitelibdir}"
 
 TARGET_CC_ARCH += "${LDFLAGS}"
 CC_FOR_OCAML="i686-oe-linux-gcc"
@@ -74,10 +85,17 @@ do_compile() {
 		       LDLIBS_libxentoollog='-lxentoollog' \
 		       LDLIBS_libxenevtchn='-lxenevtchn' \
 		       -C tools subdir-all-libxl
+
+    # ocamlopt/ocamlc -cc argument will treat everything following it as the
+    # executable name, so wrap everything.
+    cat - > ocaml-cc.sh <<EOF
+#! /bin/sh
+exec ${CC} "\$@"
+EOF
+    chmod +x ocaml-cc.sh
+
     oe_runmake V=1 \
-       CC="${CC_FOR_OCAML}" \
-       EXTRA_CFLAGS_XEN_TOOLS="${TARGET_CC_ARCH} --sysroot=${STAGING_DIR_TARGET}" \
-       LDFLAGS="${TARGET_CC_ARCH} --sysroot=${STAGING_DIR_TARGET}" \
+       CC="${B}/ocaml-cc.sh" \
        LDLIBS_libxenctrl='-lxenctrl' \
        LDLIBS_libxenstore='-lxenstore' \
        LDLIBS_libblktapctl='-lblktapctl' \
@@ -88,7 +106,7 @@ do_compile() {
 }
 
 do_install() {
-    oe_runmake DESTDIR=${D} -C tools/ocaml install
+    oe_runmake -C tools/ocaml install
 
     mv ${D}/usr/sbin/oxenstored ${D}/${sbindir}/xenstored.xen-xenstored-ocaml
     install -d ${D}${sysconfdir}/init.d

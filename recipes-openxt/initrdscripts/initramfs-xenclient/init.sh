@@ -28,7 +28,20 @@ DEFINIT=/sbin/init
 FIRSTBOOT_FLAG=/boot/system/firstboot
 
 is_tpm_2_0 () {
-    [ -e /sys/class/tpm/tpm0/device/description ] && cat /sys/class/tpm/tpm0/device/description | grep "2.0" &>/dev/null
+    # See the TPM chardev driver implementation:
+    # https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git/tree/drivers/char/tpm/tpm-sysfs.c?h=v4.14.34#n296
+    # Assuming a TPM has already been detected, absence of the sysfs entry
+    # means TPM 2.0.
+    # This is still valid on Linux 4.16.
+    if [ ! -e /sys/class/tpm/tpm0/device/caps ]; then
+        return 0
+    fi
+
+    # Sysfs caps entry contains TPM manufacturer and version info.
+    # https://www.kernel.org/doc/Documentation/ABI/stable/sysfs-class-tpm
+    local tpm_ver="$(awk '/TCG version:/ { print $3 }' /sys/class/tpm/tpm0/device/caps)"
+
+    [ "${tpm_ver}" = "2.0" ]
 }
 
 #listpcrs sample output:
@@ -48,14 +61,22 @@ pcr_bank_exists () {
 }
 
 early_setup() {
-    mkdir -p /proc /sys /mnt /tmp
+    # initialize /proc, /sys, /run/lock and /var/lock /mnt /tmp
+    mkdir -p /proc /sys /run/lock /var/lock /mnt /tmp
     mount -t proc proc /proc
     mount -t sysfs sysfs /sys
 }
 
 dev_setup()
 {
-    mount -t devtmpfs none /dev
+    if grep -q devtmpfs /proc/filesystems; then
+        mkdir -p /dev
+        mount -t devtmpfs devtmpfs /dev
+    else
+        if [ ! -d /dev ]; then
+            fatal "ERROR: /dev doesn't exist and kernel doesn't has devtmpfs enabled."
+        fi
+    fi
 
     echo "initramfs: Configuring LVM"
     lvm vgscan --mknodes
@@ -86,11 +107,12 @@ read_args() {
             debug)
                 set -x ;;
             fbcon)
-                modprobe fbcon
                 FBCON=true
                 ;;
             break=*)
                 BREAK=$optarg ;;
+            [0123456Ss])
+                RUNLEVEL=$arg ;;
         esac
     done
 }
@@ -168,12 +190,23 @@ mount_boot() {
 }
 
 boot_root() {
+    if [ ! -d /root ]; then
+        fatal "/root does not exist."
+    fi
+    if [ ! -x /root/sbin/selinux-load.sh ]; then
+        fatal "/sbin/selinux-load.sh does not exist in new root filesystem."
+    fi
+
     [ -z "$ROOT_READONLY" ] && mount -o remount,rw $ROOT_DEVICE /root
-    mount --bind /dev /root/dev
-    mount --bind /proc /root/proc
+
+    echo "Switching root to '/root'..."
+
+    mount --move /dev /root/dev
+    mount --move /proc /root/proc
     mount --move /sys /root/sys
 
-    exec switch_root -c /dev/console /root /sbin/selinux-load.sh ${INIT:-$DEFINIT}
+    cd /root
+    exec switch_root -c /dev/console /root /sbin/selinux-load.sh ${INIT:-$DEFINIT} ${RUNLEVEL}
 }
 
 fatal() {

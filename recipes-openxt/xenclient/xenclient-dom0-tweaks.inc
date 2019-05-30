@@ -12,6 +12,8 @@ SRC_URI = "file://enter-s3.sh \
 	   file://xenstore-init \
 	   file://netcon \
 	   file://grub.cfg \
+	   file://openxt.cfg \
+	   file://BOOT.CSV \
 	   file://unifont.pf2 \
 	   file://firstboot.sh \
 	   file://firstboot.initscript \
@@ -28,6 +30,7 @@ SRC_URI = "file://enter-s3.sh \
 	   file://selinux-state \
 	   file://99-kvm.rules \
 	   file://no-kvm-autosuspend.sh \
+	   file://inputrc \
 "
 
 RDEPENDS_${PN} += "bash"
@@ -75,15 +78,20 @@ do_install () {
 	install -d ${D}/usr/share/xenclient/bootloader
 	install -m 0644 ${WORKDIR}/grub.cfg \
 		${D}/usr/share/xenclient/bootloader
+	install -m 0644 ${WORKDIR}/openxt.cfg \
+		${D}/usr/share/xenclient/bootloader
+	install -m 0644 ${WORKDIR}/BOOT.CSV \
+		${D}/usr/share/xenclient/bootloader
 	install -m 0644 ${WORKDIR}/unifont.pf2 \
 		${D}/usr/share/xenclient/bootloader
 
 	mkdir -p ${D}/opt/xensource
 	ln -sf /usr/bin ${D}/opt/xensource/libexec
 
-        install -d ${D}/root/.ssh
+	install -d ${D}/root/.ssh
+	install -m 0644 ${WORKDIR}/inputrc ${D}/root/.inputrc
 
-    install -m 0755 -d ${D}${localstatedir}/lib/ovf
+	install -m 0755 -d ${D}${localstatedir}/lib/ovf
 
 	install -d ${D}/config${sysconfdir}
 	install -m 0644 ${WORKDIR}/USB_fakenames.conf \

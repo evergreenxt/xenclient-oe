@@ -1,21 +1,22 @@
 LIC_FILES_CHKSUM := "file://COPYING;md5=bbb4b1bdc2c3b6743da3c39d03249095"
 
-PV = "${XEN_VERSION}"
+require xen-version.inc
 
-SRC_URI := "${XEN_SRC_URI}"
-SRC_URI[md5sum] := "${XEN_SRC_MD5SUM}"
-SRC_URI[sha256sum] := "${XEN_SRC_SHA256SUM}"
+PV = "${XEN_PV}"
+
+SRCREV = "${XEN_SRCREV}"
+SRC_URI = "git://xenbits.xen.org/xen.git;branch=${XEN_BRANCH}"
 
 # XSA patches take precedence and belong at the head of the queue.
 # This ensures that any collisions with other patches get addressed
 # by modifying the OpenXT-specific patches, not the XSA patches.
 
+require ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', 'xen-blktap2.inc', 'xen-blktap3.inc', d)}
+
 SRC_URI_append = " \
     file://defconfig \
     file://config.patch \
-    file://do-not-overwrite-cc-and-ld.patch \
     file://disable-xen-root-check.patch \
-    file://blktap-resume-fix.patch;patch=1 \
     file://hvm-pm-hibernate-s-state.patch;patch=1 \
     file://prune-vga-acpi-dev.patch;patch=1 \
     file://smbios.patch;patch=1 \
@@ -40,16 +41,7 @@ SRC_URI_append = " \
     file://allow-pat-cacheattrs-for-all-domains.patch;patch=1 \
     file://opt-disable-vmcs-shadowing.patch;patch=1 \
     file://hvmloader-legacy-seabios-optionroms.patch;patch=1 \
-    file://blktap2-miscellaneous-oxt-fixes.patch \
-    file://blktap2-libvhd-atomic-write-helpers.patch \
-    file://blktap2-vhd-marker-flag.patch \
-    file://blktap2-vhd-print-allocated-virtblock-list.patch \
-    file://blktap2-tap-ctl-optional-pid-ro-mount.patch \
-    file://blktap2-vhd-keyhash-support.patch \
-    file://blktap2-vhd-encryption-support.patch \
-    file://blktap2-vhd-icbinn-support.patch \
     file://gpt-s3-resume-reason.patch;patch=1 \
-    file://cpufreq_gov_stop_avoid_panic.patch;patch=1 \
     file://fix-memcpy-in-x86-emulate.patch;patch=1 \
     file://stubdomain-msi-irq-access.patch;patch=1 \
     file://workaround-nehalem-igd-vtd.patch;patch=1 \
@@ -82,7 +74,6 @@ SRC_URI_append = " \
     file://libxl-openxt-tweaks.patch \
     file://libxl-domain-state.patch \
     file://libxl-fixup-cmdline-ops.patch \
-    file://libxl-crypto-key-dir.patch \
     file://libxl-fix-reboot.patch \
     file://libxl-display-manager-support.patch \
     file://libxl-xenmgr-support.patch \
@@ -94,10 +85,11 @@ SRC_URI_append = " \
     file://libxl-vwif-support.patch \
     file://libxl-atapi-pt.patch \
     file://libxl-iso-hotswap.patch \
+    file://libxl-avoid-creating-unusable-cdrom-vbd-xs-nodes.patch \
     file://libxl-disable-json-updates.patch \
     file://libxl-allow-non-qdisk-cdrom.patch \
-    file://libxl-domain-build-fix-array-size-bug.patch \
     file://libxl-fix-flr.patch \
+<<<<<<< HEAD
     file://xsa226-4.9/0001-gnttab-dont-use-possibly-unbounded-tail-calls.patch \
     file://xsa226-4.9/0002-gnttab-fix-transitive-grant-handling.patch \
     file://xsa226-4.9/0003-gnttab-fix-don-t-use-possibly-unbounded-tail-calls.patch \
@@ -123,6 +115,16 @@ SRC_URI_append = " \
     file://xsa243.patch \
     file://xsa244.patch \
     file://xen-tpm-passthrough.patch;patch=1 \
+=======
+    file://libxl-disable-vnc-query-when-disabled.patch \
+    file://xl-shutdown-wait-for-domain-death.patch \
+    file://domain-reboot.patch \
+    ${BLKTAP_PATCHQUEUE} \
+    file://efi-hardcode-openxt-cfg.patch \
+    file://efi-load-option-support.patch \
+    file://shim-support-for-shim-lock-measure.patch \
+    file://efi-require-shim.patch \
+>>>>>>> upstream/stable-8
 "
 
 COMPATIBLE_HOST = 'i686-oe-linux|(x86_64.*).*-linux|aarch64.*-linux'
@@ -130,7 +132,7 @@ COMPATIBLE_HOST = 'i686-oe-linux|(x86_64.*).*-linux|aarch64.*-linux'
 PACKAGECONFIG =+ "xsm"
 PACKAGECONFIG =+ "hvm"
 
-S = "${WORKDIR}/xen-${PV}"
+S = "${WORKDIR}/git"
 
 #--
 # Override meta-virtualization's path to seabios:
@@ -151,14 +153,3 @@ DEPENDS_remove = "iproute2"
 deltask stubs
 deltask deploy
 #--
-
-# meta-virtualization updates for Xen 4.9 -- retire when these land in m-v
-PACKAGES_append = " \
-    ${PN}-libxendevicemodel \
-    ${PN}-libxendevicemodel-dev \
-"
-FILES_${PN}-libxendevicemodel = "${libdir}/libxendevicemodel.so.*"
-FILES_${PN}-libxendevicemodel-dev = "${libdir}/libxendevicemodel.so"
-RDEPENDS_${PN}-libxenctrl_append = " \
-    ${PN}-libxendevicemodel \
-"
