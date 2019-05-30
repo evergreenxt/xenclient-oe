@@ -49,9 +49,6 @@ SRC_URI += " \
     file://policy/modules/services/dbusbouncer.fc \
     file://policy/modules/services/dbusbouncer.if \
     file://policy/modules/services/dbusbouncer.te \
-    file://policy/modules/services/dm-agent.fc \
-    file://policy/modules/services/dm-agent.if \
-    file://policy/modules/services/dm-agent.te \
     file://policy/modules/services/icbinn.fc \
     file://policy/modules/services/icbinn.if \
     file://policy/modules/services/icbinn.te \
@@ -100,6 +97,7 @@ SRC_URI += " \
 "
 # Patches.
 SRC_URI += " \
+    file://patches/policy.booleans.diff \
     file://patches/remove-xml-doc-gen.patch \
     file://patches/Makefile.diff \
     file://patches/build.conf.diff \
@@ -182,6 +180,10 @@ SRC_URI += " \
     file://patches/dev-xen-privcmd.patch \
     file://patches/policy.modules.admin.su.patch \
     file://patches/storage-Add-fcontexts-for-NVMe-disks.patch \
+<<<<<<< HEAD
+=======
+    file://patches/signed-kernel-modprobe.patch \
+>>>>>>> upstream/stable-9
 "
 #file://patches/upstream-add-binder-security-class.patch
 #file://patches/upstream-update-netlink-classes.patch

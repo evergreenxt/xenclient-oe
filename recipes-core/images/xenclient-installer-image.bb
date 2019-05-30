@@ -38,7 +38,6 @@ IMAGE_FEATURES += "empty-root-password"
 
 IMAGE_INSTALL = "\
     initscripts \
-    modules-installer \
     packagegroup-core-boot \
     packagegroup-base \
     packagegroup-xenclient-common \
@@ -46,11 +45,15 @@ IMAGE_INSTALL = "\
     linux-firmware-iwlwifi \
     linux-firmware-bnx2 \
     linux-firmware-i915 \
+    linux-firmware-nvidia \
+    linux-firmware-radeon \
+    libdrm-nouveau \
+    libdrm-radeon \
 "
 # The entire installer rootfs is passed as the initramfs.
-# Inflate the maximum value to 256M to reflect that (original definition is
+# Inflate the maximum value to 512M to reflect that (original definition is
 # 128M in bitbake.conf)
-INITRAMFS_MAXSIZE = "262144"
+INITRAMFS_MAXSIZE = "524288"
 
 inherit image
 inherit xenclient-licences

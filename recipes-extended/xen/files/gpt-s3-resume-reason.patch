@@ -33,7 +33,11 @@ PATCHES
 ################################################################################
 --- a/xen/arch/x86/hvm/hvm.c
 +++ b/xen/arch/x86/hvm/hvm.c
+<<<<<<< HEAD
 @@ -3987,6 +3987,9 @@ static void hvm_s3_suspend(struct domain
+=======
+@@ -4002,6 +4002,9 @@ static void hvm_s3_suspend(struct domain
+>>>>>>> upstream/stable-9
      domain_unlock(d);
  }
  
@@ -43,7 +47,11 @@ PATCHES
  static void hvm_s3_resume(struct domain *d)
  {
      if ( test_and_clear_bool(d->arch.hvm_domain.is_s3_suspended) )
+<<<<<<< HEAD
 @@ -3995,6 +3998,10 @@ static void hvm_s3_resume(struct domain
+=======
+@@ -4010,6 +4013,10 @@ static void hvm_s3_resume(struct domain
+>>>>>>> upstream/stable-9
  
          for_each_vcpu( d, v )
              hvm_set_guest_tsc(v, 0);

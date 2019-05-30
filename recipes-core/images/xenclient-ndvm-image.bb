@@ -10,7 +10,8 @@ IMAGE_FEATURES += " \
     package-management \
     read-only-rootfs \
 "
-IMAGE_FSTYPES = "ext3.vhd.gz"
+
+IMAGE_FSTYPES = "ext3.disk.vhd.gz"
 export IMAGE_BASENAME = "xenclient-ndvm-image"
 
 COMPATIBLE_MACHINE = "(xenclient-ndvm)"
@@ -30,7 +31,7 @@ IMAGE_FEATURES += "empty-root-password"
 
 IMAGE_INSTALL = " \
     ${ROOTFS_PKGMANAGE} \
-    modules \
+    modules-ndvm \
     packagegroup-core-boot \
     packagegroup-base \
     packagegroup-xenclient-common \

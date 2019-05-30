@@ -36,7 +36,11 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_create.c
 +++ b/tools/libxl/libxl_create.c
+<<<<<<< HEAD
 @@ -954,6 +954,12 @@ static void initiate_domain_create(libxl
+=======
+@@ -995,6 +995,12 @@ static void initiate_domain_create(libxl
+>>>>>>> upstream/stable-9
      dcs->sdss.dm.guest_domid = 0; /* means we haven't spawned */
  
      /*
@@ -59,9 +63,9 @@ PATCHES
 +        libxl_update_state(CTX, domid, "suspending");
 +
          /* Save DM state into filename */
-         ret = libxl__qmp_save(gc, domid, filename);
+         ret = libxl__qmp_save(gc, domid, filename, dsps->live);
          if (ret)
-@@ -153,6 +156,8 @@ static void domain_suspend_callback_comm
+@@ -151,6 +154,8 @@ static void domain_suspend_callback_comm
          xc_hvm_param_get(CTX->xch, domid, HVM_PARAM_ACPI_S_STATE, &hvm_s_state);
      }
  
@@ -69,8 +73,8 @@ PATCHES
 +
      if ((hvm_s_state == 0) && (dsps->guest_evtchn.port >= 0)) {
          LOGD(DEBUG, domid, "issuing %s suspend request via event channel",
-             dsps->type == LIBXL_DOMAIN_TYPE_HVM ? "PVHVM" : "PV");
-@@ -202,6 +207,9 @@ static void domain_suspend_callback_comm
+             dsps->type != LIBXL_DOMAIN_TYPE_PV ? "PVH/HVM" : "PV");
+@@ -200,6 +205,9 @@ static void domain_suspend_callback_comm
      dsps->pvcontrol.timeout_ms = 60 * 1000;
      dsps->pvcontrol.callback = domain_suspend_common_pvcontrol_suspending;
      libxl__xswait_start(gc, &dsps->pvcontrol);
@@ -91,7 +95,7 @@ PATCHES
      libxl__domain_save_state *dss;
      GCNEW(dss);
  
-@@ -533,6 +535,9 @@ int libxl_domain_pause(libxl_ctx *ctx, u
+@@ -567,6 +569,9 @@ int libxl_domain_pause(libxl_ctx *ctx, u
          GC_FREE;
          return ERROR_FAIL;
      }
@@ -101,7 +105,7 @@ PATCHES
      GC_FREE;
      return 0;
  }
-@@ -583,6 +588,9 @@ int libxl_domain_unpause(libxl_ctx *ctx,
+@@ -614,6 +619,9 @@ int libxl_domain_unpause(libxl_ctx *ctx,
          }
      }
      ret = xc_domain_unpause(ctx->xch, domid);

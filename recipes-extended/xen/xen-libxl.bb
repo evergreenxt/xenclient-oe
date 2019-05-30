@@ -29,6 +29,8 @@ python () {
     d.appendVar("FILES_xen-xl", " /etc/init.d/xen-init-dom0")
 }
 
+FLASK_POLICY_FILE = "xenpolicy-${XEN_PV}"
+
 DEPENDS += " \
     util-linux \
     xen \
@@ -88,6 +90,8 @@ EXTRA_OEMAKE += "CONFIG_IOEMU=n"
 EXTRA_OEMAKE += "CONFIG_TESTS=n"
 EXTRA_OEMAKE += "DESTDIR=${D}"
 
+EXTRA_OECONF += " --enable-blktap2 "
+
 #Make sure we disable all compiler optimizations to avoid a nasty segfault in the 
 #reboot case.
 BUILD_LDFLAGS += " -Wl,-O0 -O0"
@@ -97,7 +101,7 @@ BUILD_OPTIMIZATION = "-pipe"
 FULL_OPTIMIZATION = "-pipe ${DEBUG_FLAGS}"
 
 TARGET_CC_ARCH += "${LDFLAGS}"
-CC_FOR_OCAML="i686-oe-linux-gcc"
+CC_FOR_OCAML="${TARGET_PREFIX}gcc"
 
 INITSCRIPT_PACKAGES = "xen-xl"
 INITSCRIPT_NAME_xen-xl = "xen-init-dom0"
@@ -107,9 +111,15 @@ do_configure_prepend() {
 	#remove optimizations in the config files
 	sed -i 's/-O2//g' ${S}/Config.mk
 	sed -i 's/-O2//g' ${S}/config/StdGNU.mk
+<<<<<<< HEAD
+=======
+
+	cp "${WORKDIR}/defconfig" "${B}/xen/.config"
+>>>>>>> upstream/stable-9
 }
 
 do_compile() {
+    oe_runmake -C tools/libs subdir-all-toolcore
     oe_runmake -C tools subdir-all-include
     oe_runmake LDLIBS_libxenctrl='-lxenctrl' \
 		       LDLIBS_libxenstore='-lxenstore' \

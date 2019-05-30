@@ -60,7 +60,11 @@ PATCHES
          return AO_INPROGRESS;                                           \
 --- a/tools/libxl/libxl_create.c
 +++ b/tools/libxl/libxl_create.c
+<<<<<<< HEAD
 @@ -1626,25 +1626,6 @@ static void domcreate_complete(libxl__eg
+=======
+@@ -1699,25 +1699,6 @@ static void domcreate_complete(libxl__eg
+>>>>>>> upstream/stable-9
  
      bool retain_domain = !rc || rc == ERROR_ABORTED;
  

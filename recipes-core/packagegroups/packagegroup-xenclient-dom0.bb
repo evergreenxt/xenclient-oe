@@ -42,6 +42,7 @@ RDEPENDS_${PN} = " \
     iproute2 \
     qemu-dm \
     seabios \
+    ovmf \
     xcpmd \
     vbetool \
     xenclient-toolstack \
@@ -78,6 +79,7 @@ RDEPENDS_${PN} = " \
     ethtool \
     intel-microcode \
     rsyslog \
+    rsyslog-conf-dom0 \
     logrotate \
     qemu-wrappers \
     dialog \
@@ -111,12 +113,9 @@ RDEPENDS_${PN} = " \
     uid \
     surfman \
     linuxfb-surfman-plugin \
-    dm-agent \
     xenmgr \
     xen-xenstore \
-    libtss2 \
-    libtctidevice \
-    libtctisocket \
+    tpm2-tss \
     tpm2-tools \
     ${@bb.utils.contains('DISTRO_FEATURES', 'blktap2', 'xen-blktap xen-libblktapctl xen-libvhd', 'blktap3', d)} \
     pesign \

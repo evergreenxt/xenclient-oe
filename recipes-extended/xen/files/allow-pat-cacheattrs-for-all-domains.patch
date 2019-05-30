@@ -36,7 +36,11 @@ PATCHES
 ################################################################################
 --- a/xen/arch/x86/mm.c
 +++ b/xen/arch/x86/mm.c
+<<<<<<< HEAD
 @@ -168,13 +168,7 @@ static uint32_t base_disallow_mask;
+=======
+@@ -164,13 +164,7 @@ static uint32_t base_disallow_mask;
+>>>>>>> upstream/stable-9
  
  #define L4_DISALLOW_MASK (base_disallow_mask)
  
@@ -50,4 +54,4 @@ PATCHES
 +#define l1_disallow_mask(d) (L1_DISALLOW_MASK & ~PAGE_CACHE_ATTRS)
  
  static s8 __read_mostly opt_mmio_relax;
- static void __init parse_mmio_relax(const char *s)
+ 

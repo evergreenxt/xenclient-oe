@@ -34,7 +34,11 @@ PATCHES
 ################################################################################
 --- a/tools/configure
 +++ b/tools/configure
+<<<<<<< HEAD
 @@ -7407,63 +7407,6 @@ else
+=======
+@@ -7422,63 +7422,6 @@ else
+>>>>>>> upstream/stable-9
  
  fi
  
@@ -98,7 +102,7 @@ PATCHES
  CPPFLAGS=$ac_previous_cppflags
  LDFLAGS=$ac_previous_ldflags
  
-@@ -8716,53 +8659,6 @@ $as_echo "$ax_cv_ptyfuncs_libs" >&6; }
+@@ -8731,53 +8674,6 @@ $as_echo "$ax_cv_ptyfuncs_libs" >&6; }
      PTYFUNCS_LIBS="$ax_cv_ptyfuncs_libs"
  
  

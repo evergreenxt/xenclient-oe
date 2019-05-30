@@ -31,6 +31,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
+<<<<<<< HEAD
 @@ -828,14 +828,13 @@ static char *qemu_disk_ide_drive_string(
      const char *exportname = disk->colo_export;
      const char *active_disk = disk->active_disk;
@@ -38,17 +39,27 @@ PATCHES
 -    
 -    assert(disk->readwrite); /* should have been checked earlier */
 +    const char *access = (disk->readwrite ? "cache=writeback" : "readonly");
+=======
+@@ -850,13 +850,14 @@ static char *qemu_disk_ide_drive_string(
+     const char *active_disk = disk->active_disk;
+     const char *hidden_disk = disk->hidden_disk;
+ 
+-    assert(disk->readwrite); /* should have been checked earlier */
++    // OpenXT allows read-only IDE drives
++    //assert(disk->readwrite); /* should have been checked earlier */
+>>>>>>> upstream/stable-9
  
      switch (colo_mode) {
      case LIBXL__COLO_NONE:
          drive = GCSPRINTF
 -            ("file=%s,if=ide,index=%d,media=disk,format=%s,cache=writeback",
 -             target_path, unit, format);
-+            ("file=%s,if=ide,index=%d,media=disk,format=%s,%s",
-+             target_path, unit, format, access);
++            ("file=%s,if=ide,index=%d,media=disk,format=%s,readonly=%s,cache=writeback",
++             target_path, unit, format, disk->readwrite ? "off" : "on");
          break;
      case LIBXL__COLO_PRIMARY:
          /*
+<<<<<<< HEAD
 @@ -848,13 +847,13 @@ static char *qemu_disk_ide_drive_string(
           *  vote-threshold=1
           */
@@ -84,6 +95,9 @@ PATCHES
      default:
           abort();
 @@ -1566,11 +1565,6 @@ static int libxl__build_device_model_arg
+=======
+@@ -1624,11 +1625,6 @@ static int libxl__build_device_model_arg
+>>>>>>> upstream/stable-9
                          disk, disk), NULL);
                      continue;
                  } else if (disk < 4) {

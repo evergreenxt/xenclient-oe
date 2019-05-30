@@ -27,13 +27,14 @@ BAD_RECOMMENDATIONS += " \
 IMAGE_INSTALL = "\
     ${ROOTFS_PKGMANAGE} \
     initscripts \
-    modules \
+    modules-dom0 \
     packagegroup-core-boot \
     packagegroup-base \
     packagegroup-xenclient-common \
     packagegroup-xenclient-dom0 \
     packagegroup-openxt-test \
     v4v-module \
+    txt-info-module \
     xenclient-preload-hs-libs \
     linux-firmware-i915 \
     ${@bb.utils.contains('IMAGE_FEATURES', 'debug-tweaks', 'packagegroup-selinux-policycoreutils audit', '' ,d)} \
@@ -58,7 +59,6 @@ post_rootfs_shell_commands() {
     ln -s ../config/etc/passwd ${IMAGE_ROOTFS}/etc/passwd
     ln -s ../config/etc/shadow ${IMAGE_ROOTFS}/etc/shadow
     ln -s ../config/etc/.pwd.lock ${IMAGE_ROOTFS}/etc/.pwd.lock
-    ln -s ../var/volatile/etc/asound ${IMAGE_ROOTFS}/etc/asound
 
     rm ${IMAGE_ROOTFS}/etc/hosts
     ln -s /var/run/hosts ${IMAGE_ROOTFS}/etc/hosts

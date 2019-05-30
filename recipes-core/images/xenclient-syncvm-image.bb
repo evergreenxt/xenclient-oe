@@ -8,6 +8,7 @@ LIC_FILES_CHKSUM = " \
 
 IMAGE_FEATURES += " \
     package-management \
+    read-only-rootfs \
 "
 
 IMAGE_FSTYPES = "ext3.vhd.gz"
@@ -17,7 +18,7 @@ COMPATIBLE_MACHINE = "(xenclient-syncvm)"
 
 IMAGE_INSTALL = "\
     ${ROOTFS_PKGMANAGE} \
-    modules \
+    modules-syncvm \
     packagegroup-core-boot \
     packagegroup-base \
     packagegroup-xenclient-common \

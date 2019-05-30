@@ -36,10 +36,14 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
+<<<<<<< HEAD
 @@ -2018,6 +2018,11 @@ void libxl__spawn_stub_dm(libxl__egc *eg
+=======
+@@ -2085,6 +2085,11 @@ void libxl__spawn_stub_dm(libxl__egc *eg
+>>>>>>> upstream/stable-9
                                     libxl__xs_get_dompath(gc, guest_domid)),
                          "%s",
-                         libxl_bios_type_to_string(LIBXL_BIOS_TYPE_SEABIOS));
+                         libxl_bios_type_to_string(guest_config->b_info.u.hvm.bios));
 +        /* OpenXT: We use legacy roms, which is disabled by default in sebios */
 +        libxl__xs_printf(gc, XBT_NULL,
 +                        libxl__sprintf(gc, "%s/hvmloader/seabios-legacy-load-roms",
@@ -48,7 +52,11 @@ PATCHES
      }
      ret = xc_domain_set_target(ctx->xch, dm_domid, guest_domid);
      if (ret<0) {
+<<<<<<< HEAD
 @@ -2042,6 +2047,12 @@ retry_transaction:
+=======
+@@ -2109,6 +2114,12 @@ retry_transaction:
+>>>>>>> upstream/stable-9
          if (errno == EAGAIN)
              goto retry_transaction;
  
@@ -61,7 +69,11 @@ PATCHES
      libxl__multidev_begin(ao, &sdss->multidev);
      sdss->multidev.callback = spawn_stub_launch_dm;
      /* OpenXT: Again, no disk for the stubdom itself */
+<<<<<<< HEAD
 @@ -2060,7 +2071,6 @@ static void spawn_stub_launch_dm(libxl__
+=======
+@@ -2127,7 +2138,6 @@ static void spawn_stub_launch_dm(libxl__
+>>>>>>> upstream/stable-9
  {
      libxl__stub_dm_spawn_state *sdss = CONTAINER_OF(multidev, *sdss, multidev);
      STATE_AO_GC(sdss->dm.spawn.ao);
@@ -69,9 +81,13 @@ PATCHES
      int i, num_console = STUBDOM_SPECIAL_CONSOLES;
      libxl__device_console *console;
  
+<<<<<<< HEAD
 @@ -2106,21 +2116,16 @@ static void spawn_stub_launch_dm(libxl__
+=======
+@@ -2177,21 +2187,16 @@ static void spawn_stub_launch_dm(libxl__
+ 
+>>>>>>> upstream/stable-9
      for (i = 0; i < num_console; i++) {
-         libxl__device device;
          console[i].devid = i;
 -        console[i].consback = LIBXL__CONSOLE_BACKEND_IOEMU;
 +        /* OpenXT: our console backend is xenconsoled */
@@ -92,6 +108,7 @@ PATCHES
 -                console[i].output = GCSPRINTF("file:%s", filename);
 -                free(filename);
 +                console[i].output = "pty";
+<<<<<<< HEAD
                  break;
              case STUBDOM_CONSOLE_SAVE:
                  if (guest_config->b_info.stubdomain_version
@@ -104,6 +121,12 @@ PATCHES
      libxl__xswait_init(&sdss->xswait);
  
 @@ -2324,6 +2328,17 @@ void libxl__spawn_local_dm(libxl__egc *e
+=======
+                 /* will be changed back to LIBXL__CONSOLE_BACKEND_IOEMU if qemu
+                  * will be in use */
+                 console[i].consback = LIBXL__CONSOLE_BACKEND_XENCONSOLED;
+@@ -2404,6 +2409,17 @@ void libxl__spawn_local_dm(libxl__egc *e
+>>>>>>> upstream/stable-9
                           b_info->device_model_version==LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN_TRADITIONAL &&
                           !libxl__vnuma_configured(b_info));
          free(path);
@@ -123,13 +146,21 @@ PATCHES
      path = DEVICE_MODEL_XS_PATH(gc, LIBXL_TOOLSTACK_DOMID, domid, "");
 --- a/tools/libxl/libxl_domain.c
 +++ b/tools/libxl/libxl_domain.c
+<<<<<<< HEAD
 @@ -577,7 +577,8 @@ int libxl_domain_unpause(libxl_ctx *ctx,
              if (rc < 0) {
                  LOGD(ERROR, domid, "Failed to unpause device model for domain:%d",
                       rc);
 -                goto out;
+=======
+@@ -609,7 +609,8 @@ int libxl_domain_unpause(libxl_ctx *ctx,
+         if (rc < 0) {
+             LOGD(ERROR, domid,
+                  "Failed to unpause device model for domain: %d", rc);
+-            goto out;
+>>>>>>> upstream/stable-9
 +                /* OpenXT: This is not fatal, xc_domain_unpause() is enough */
 +                /* goto out; */
-             }
          }
      }
+     ret = xc_domain_unpause(ctx->xch, domid);

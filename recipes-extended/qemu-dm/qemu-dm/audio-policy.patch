@@ -1,0 +1,147 @@
+From: Jed <lejosnej@ainfosec.com>
+Date: Fri, 23 Jan 2015 16:54:42 -0500
+Subject: [PATCH] qemu: add a patch for OpenXT audio policy bits, with just the audio recording flag for now
+
+################################################################################
+SHORT DESCRIPTION: 
+################################################################################
+Add a patch for OpenXT audio policy bits, with just the audio recording flag
+for now.
+
+################################################################################
+LONG DESCRIPTION: 
+################################################################################
+TODO
+
+################################################################################
+CHANGELOG 
+################################################################################
+Ported to QEMU 2.6.2: Ross Philipson, philipsonr@ainfosec.com, 10/13/2016
+
+For HDA, we could look to only create hda-output to avoid even having an
+input device.
+
+################################################################################
+REMOVAL 
+################################################################################
+
+################################################################################
+UPSTREAM PLAN 
+################################################################################
+
+################################################################################
+INTERNAL DEPENDENCIES 
+################################################################################
+
+################################################################################
+PATCHES
+################################################################################
+--- a/hw/audio/ac97.c
++++ b/hw/audio/ac97.c
+@@ -24,6 +24,8 @@
+ #include "hw/pci/pci.h"
+ #include "sysemu/dma.h"
+ 
++extern int disable_audio_recording;
++
+ enum {
+     AC97_Reset                     = 0x00,
+     AC97_Master_Volume_Mute        = 0x02,
+@@ -1039,6 +1041,13 @@ static int read_audio (AC97LinkState *s,
+     int to_copy = 0;
+     SWVoiceIn *voice = (r - s->bm_regs) == MC_INDEX ? s->voice_mc : s->voice_pi;
+ 
++    /* Disable audio recording. */
++    if (disable_audio_recording)
++    {
++        *stop = 1;
++        return 0;
++    }
++
+     temp = audio_MIN (temp, max);
+ 
+     if (!temp) {
+--- a/hw/audio/hda-codec.c
++++ b/hw/audio/hda-codec.c
+@@ -27,6 +27,8 @@
+ 
+ /* -------------------------------------------------------------------------- */
+ 
++extern int disable_audio_recording;
++
+ typedef struct desc_param {
+     uint32_t id;
+     uint32_t val;
+@@ -237,10 +239,13 @@ static void hda_audio_input_timer(void *
+     while (to_transfer) {
+         uint32_t start = (rpos & B_MASK);
+         uint32_t chunk = audio_MIN(B_SIZE - start, to_transfer);
+-        int rc = hda_codec_xfer(
+-                &st->state->hda, st->stream, false, st->buf + start, chunk);
+-        if (!rc) {
+-            break;
++        /* Only transfer input if allowed by the policy */
++        if (!disable_audio_recording) {
++            int rc = hda_codec_xfer(
++                    &st->state->hda, st->stream, false, st->buf + start, chunk);
++            if (!rc) {
++                break;
++            }
+         }
+         rpos += chunk;
+         to_transfer -= chunk;
+@@ -368,10 +373,13 @@ static void hda_audio_compat_input_cb(vo
+                 break;
+             }
+         }
+-        rc = hda_codec_xfer(&st->state->hda, st->stream, false,
+-                            st->compat_buf, sizeof(st->compat_buf));
+-        if (!rc) {
+-            break;
++        /* Only transfer input if allowed by the policy */
++        if (!disable_audio_recording) {
++            rc = hda_codec_xfer(&st->state->hda, st->stream, false,
++                                st->compat_buf, sizeof(st->compat_buf));
++            if (!rc) {
++                break;
++            }
+         }
+         st->compat_bpos = 0;
+     }
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -454,6 +454,14 @@ modprobe i810_audio clocking=48000
+ @end example
+ ETEXI
+ 
++DEF("disable-audio-rec", 0, QEMU_OPTION_disable_audio_rec,
++    "-disable-audio-rec Disable audio recording\n", QEMU_ARCH_ALL)
++STEXI
++@item -disable-audio-rec
++@findex -disable-audio-rec
++Disable audio recording in the guest.
++ETEXI
++
+ DEF("device", HAS_ARG, QEMU_OPTION_device,
+     "-device driver[,prop[=value][,...]]\n"
+     "                add device (based on driver)\n"
+--- a/vl.c
++++ b/vl.c
+@@ -193,6 +193,7 @@ bool boot_strict;
+ uint8_t *boot_splash_filedata;
+ size_t boot_splash_filedata_size;
+ uint8_t qemu_extra_params_fw[2];
++int disable_audio_recording = 0;
+ 
+ int icount_align_option;
+ 
+@@ -3288,6 +3289,9 @@ int main(int argc, char **argv, char **e
+             case QEMU_OPTION_soundhw:
+                 select_soundhw (optarg);
+                 break;
++            case QEMU_OPTION_disable_audio_rec:
++                disable_audio_recording = 1;
++                break;
+             case QEMU_OPTION_h:
+                 help(0);
+                 break;

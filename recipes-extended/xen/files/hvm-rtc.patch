@@ -53,6 +53,7 @@ PATCHES
          domain_unpause(d);
      }
      rcu_read_unlock(&domlist_read_lock);
+<<<<<<< HEAD
 --- a/xen/arch/x86/hvm/io.c
 +++ b/xen/arch/x86/hvm/io.c
 @@ -56,9 +56,6 @@ void send_timeoffset_req(unsigned long t
@@ -65,6 +66,8 @@ PATCHES
      if ( hvm_broadcast_ioreq(&p, 1) != 0 )
          gprintk(XENLOG_ERR, "Unsuccessful timeoffset update\n");
  }
+=======
+>>>>>>> upstream/stable-9
 --- a/xen/arch/x86/hvm/rtc.c
 +++ b/xen/arch/x86/hvm/rtc.c
 @@ -574,7 +574,7 @@ static void rtc_set_time(RTCState *s)
@@ -94,3 +97,15 @@ PATCHES
  }
  
  static void rtc_copy_date(RTCState *s)
+--- a/xen/arch/x86/hvm/io.c
++++ b/xen/arch/x86/hvm/io.c
+@@ -57,9 +57,6 @@ void send_timeoffset_req(unsigned long t
+         .state = STATE_IOREQ_READY,
+     };
+ 
+-    if ( timeoff == 0 )
+-        return;
+-
+     if ( hvm_broadcast_ioreq(&p, true) != 0 )
+         gprintk(XENLOG_ERR, "Unsuccessful timeoffset update\n");
+ }

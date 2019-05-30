@@ -14,12 +14,14 @@ IMAGE_FSTYPES = "cpio.gz"
 IMAGE_INSTALL = " \
     busybox \
     lvm2 \
-    libtss2 \
-    libtctisocket \
-    libtctidevice \
     tpm-tools-sa \
+    tpm2-tss \
     tpm2-tools \
-    initramfs-xenclient \
+    initramfs-module-lvm \
+    initramfs-module-bootfs \
+    initramfs-module-tpm \
+    initramfs-module-tpm2 \
+    initramfs-module-selinux \
     xenclient-initramfs-shared-libs \
     kernel-module-tpm \
     kernel-module-tpm-tis \

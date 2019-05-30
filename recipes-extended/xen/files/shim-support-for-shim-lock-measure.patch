@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 From 89bb42087d83f1817245083da19331dd03efc727 Mon Sep 17 00:00:00 2001
+=======
+From 86e06607ac74f6c7fbe5b85dbc67bde75f1245c3 Mon Sep 17 00:00:00 2001
+>>>>>>> upstream/stable-9
 From: Tamas K Lengyel <tamas@tklengyel.com>
 Date: Fri, 2 Feb 2018 17:39:56 -0700
 Subject: [PATCH] Shim lock measure
@@ -7,8 +11,15 @@ Support measuring critical components into the TPM using shim_lock->Measure
 
 Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
 ---
+<<<<<<< HEAD
  xen/common/efi/boot.c | 75 +++++++++++++++++++++++++++++++++++++++++++++++----
  1 file changed, 70 insertions(+), 5 deletions(-)
+=======
+ xen/common/efi/boot.c    | 49 +++++++++++++++++++++++++++++++++++++++++++-----
+ xen/common/efi/runtime.c | 26 +++++++++++++++++++++++++
+ xen/include/xen/efi.h    |  1 +
+ 3 files changed, 71 insertions(+), 5 deletions(-)
+>>>>>>> upstream/stable-9
 
 --- a/xen/common/efi/boot.c
 +++ b/xen/common/efi/boot.c
@@ -30,6 +41,7 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
  } EFI_SHIM_LOCK_PROTOCOL;
  
  struct _EFI_APPLE_PROPERTIES;
+<<<<<<< HEAD
 @@ -1095,6 +1104,32 @@ static int __init __maybe_unused set_col
     return max(*pos + *sz, bpp);
  }
@@ -64,6 +76,9 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
  efi_start(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
  {
 @@ -1105,7 +1140,7 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+=======
+@@ -1131,7 +1140,7 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+>>>>>>> upstream/stable-9
      unsigned int i, argc;
      CHAR16 **argv, *file_name, *cfg_file_name = L"openxt.cfg", *options = NULL;
      UINTN gop_mode = ~0;
@@ -71,13 +86,25 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
 +    EFI_SHIM_LOCK_PROTOCOL *shim_lock = NULL;
      EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
      union string section = { NULL }, name;
+<<<<<<< HEAD
      bool_t base_video = 0;
 @@ -1225,6 +1260,13 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+=======
+     bool base_video = false;
+@@ -1215,6 +1224,8 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+     PrintStr(L"Xen " __stringify(XEN_VERSION) "." __stringify(XEN_SUBVERSION)
+              XEN_EXTRAVERSION " (c/s " XEN_CHANGESET ") EFI loader\r\n");
+ 
++    efi_bs->LocateProtocol(&shim_lock_guid, NULL, (void **)&shim_lock);
++
+     efi_arch_relocate_image(0);
+ 
+     if ( use_cfg_file )
+@@ -1253,6 +1264,11 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+>>>>>>> upstream/stable-9
          }
          else if ( !read_file(dir_handle, cfg_file_name, &cfg, NULL) )
              blexit(L"Configuration file not found.");
-+
-+        efi_bs->LocateProtocol(&shim_lock_guid, NULL, (void **)&shim_lock);
 +
 +        if ( shim_lock &&
 +            (status = shim_lock->Measure(cfg.ptr, cfg.size, 8)) != EFI_SUCCESS )
@@ -86,7 +113,11 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
          pre_parse(&cfg);
  
          if ( section.w )
+<<<<<<< HEAD
 @@ -1262,16 +1304,34 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+=======
+@@ -1290,16 +1306,34 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+>>>>>>> upstream/stable-9
          read_file(dir_handle, s2w(&name), &kernel, option_str);
          efi_bs->FreePool(name.w);
  
@@ -96,7 +127,11 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
 -            PrintErrMesg(L"Dom0 kernel image could not be verified", status);
 +        if ( shim_lock )
 +        {
+<<<<<<< HEAD
 +            if ( secureboot_enabled() )
+=======
++            if ( efi_secureboot_enabled() )
+>>>>>>> upstream/stable-9
 +            {
 +                if ( (status = shim_lock->Verify(kernel.ptr, kernel.size))
 +                    != EFI_SUCCESS )
@@ -125,7 +160,11 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
          }
  
          name.s = get_value(&cfg, section.s, "xsm");
+<<<<<<< HEAD
 @@ -1279,6 +1339,11 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+=======
+@@ -1307,6 +1341,11 @@ efi_start(EFI_HANDLE ImageHandle, EFI_SY
+>>>>>>> upstream/stable-9
          {
              read_file(dir_handle, s2w(&name), &xsm, NULL);
              efi_bs->FreePool(name.w);
@@ -136,4 +175,53 @@ Signed-off-by: Tamas K Lengyel <lengyelt@ainfosec.com>
 +                    PrintErrMesg(L"XSM policy could not be measured", status);
          }
  
+<<<<<<< HEAD
          name.s = get_value(&cfg, section.s, "options");
+=======
+         /*
+--- a/xen/common/efi/runtime.c
++++ b/xen/common/efi/runtime.c
+@@ -193,6 +193,32 @@ void efi_reset_system(bool warm)
+     printk(XENLOG_WARNING "EFI: could not reset system (%#lx)\n", status);
+ }
+ 
++bool efi_secureboot_enabled(void)
++{
++    EFI_GUID efi_gv = EFI_GLOBAL_VARIABLE;
++    UINT8 SecureBoot = 0, SetupMode = 0;
++    UINTN DataSize = sizeof(SecureBoot);
++    EFI_STATUS efi_status;
++
++    efi_status = efi_rs->GetVariable(L"SecureBoot", &efi_gv, NULL,
++                                     &DataSize, &SecureBoot);
++    if ( EFI_ERROR(efi_status) )
++        return false;
++
++    if ( !SecureBoot )
++        return false;
++
++    efi_status = efi_rs->GetVariable(L"SetupMode", &efi_gv, NULL,
++                                     &DataSize, &SetupMode);
++    if ( EFI_ERROR(efi_status) )
++        return false;
++
++    if ( SetupMode )
++        return false;
++
++    return true;
++}
++
+ #endif /* CONFIG_ARM */
+ #endif
+ 
+--- a/xen/include/xen/efi.h
++++ b/xen/include/xen/efi.h
+@@ -43,6 +43,7 @@ int efi_runtime_call(struct xenpf_efi_ru
+ #endif
+ int efi_compat_get_info(uint32_t idx, union compat_pf_efi_info *);
+ int efi_compat_runtime_call(struct compat_pf_efi_runtime_call *);
++bool efi_secureboot_enabled(void);
+ 
+ #endif /* !__ASSEMBLY__ */
+ 
+>>>>>>> upstream/stable-9

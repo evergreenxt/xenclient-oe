@@ -41,7 +41,11 @@ PATCHES
 ################################################################################
 --- a/xen/arch/x86/smpboot.c
 +++ b/xen/arch/x86/smpboot.c
+<<<<<<< HEAD
 @@ -458,7 +458,14 @@ static int wakeup_secondary_cpu(int phys
+=======
+@@ -468,7 +468,14 @@ static int wakeup_secondary_cpu(int phys
+>>>>>>> upstream/stable-9
           * While AP is in root mode handling the INIT the CPU will drop
           * any SIPIs
           */

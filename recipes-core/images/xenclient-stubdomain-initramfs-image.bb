@@ -13,11 +13,10 @@ COMPATIBLE_MACHINE = "(xenclient-stubdomain)"
 IMAGE_INSTALL = " \
     busybox \
     bridge-utils \
-    initramfs-xenclient \
+    initramfs-stubdomain \
     xen-xenstore \
     qemu-dm-stubdom \
     v4v-module \
-    dm-agent \
     simple-poweroff \
     rsyslog \
 "

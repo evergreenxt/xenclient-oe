@@ -1,0 +1,88 @@
+###############################################################################
+SHORT DESCRIPTION:
+###############################################################################
+QEMU remove unused block format support
+
+###############################################################################
+LONG DESCRIPTION:
+###############################################################################
+In an effort to minimize the size of QEMU, we remove unused features.  Here, we
+build-time disable many of the unused block formats.  These cannot be disabled
+in the configure script, so we set them to 'n' in Makefile.objs.
+
+block.c needed modification to remove references to the disabled qcow2
+format.
+
+###############################################################################
+PATCHES:
+###############################################################################
+--- a/block.c
++++ b/block.c
+@@ -2545,6 +2545,7 @@ fail:
+     return bs;
+ }
+ 
++#if 0 /* OpenXT remove reference to Qcow2 */
+ static BlockDriverState *bdrv_append_temp_snapshot(BlockDriverState *bs,
+                                                    int flags,
+                                                    QDict *snapshot_options,
+@@ -2614,7 +2615,7 @@ out:
+     g_free(tmp_filename);
+     return bs_snapshot;
+ }
+-
++#endif /* OpenXT remove reference to Qcow2 */
+ /*
+  * Opens a disk image (raw, qcow2, vmdk, ...)
+  *
+@@ -2859,6 +2860,7 @@ static BlockDriverState *bdrv_open_inher
+     qobject_unref(options);
+     options = NULL;
+ 
++#if 0 /* OpenXT remove reference to Qcow2 */
+     /* For snapshot=on, create a temporary qcow2 overlay. bs points to the
+      * temporary snapshot afterwards. */
+     if (snapshot_flags) {
+@@ -2876,6 +2878,7 @@ static BlockDriverState *bdrv_open_inher
+         bdrv_unref(bs);
+         bs = snapshot_bs;
+     }
++#endif /* OpenXT remove reference to Qcow2 */
+ 
+     return bs;
+ 
+--- a/block/Makefile.objs
++++ b/block/Makefile.objs
+@@ -1,4 +1,5 @@
+-block-obj-y += raw-format.o vmdk.o vpc.o
++block-obj-y += raw-format.o
++block-obj-n += vmdk.o vpc.o
+ block-obj-$(CONFIG_QCOW1) += qcow.o
+ block-obj-$(CONFIG_VDI) += vdi.o
+ block-obj-$(CONFIG_CLOOP) += cloop.o
+@@ -6,12 +7,12 @@ block-obj-$(CONFIG_BOCHS) += bochs.o
+ block-obj-$(CONFIG_VVFAT) += vvfat.o
+ block-obj-$(CONFIG_DMG) += dmg.o
+ 
+-block-obj-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-cache.o qcow2-bitmap.o
++block-obj-n += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-cache.o qcow2-bitmap.o
+ block-obj-$(CONFIG_QED) += qed.o qed-l2-cache.o qed-table.o qed-cluster.o
+ block-obj-$(CONFIG_QED) += qed-check.o
+-block-obj-y += vhdx.o vhdx-endian.o vhdx-log.o
+-block-obj-y += quorum.o
+-block-obj-y += blkdebug.o blkverify.o blkreplay.o
++block-obj-n += vhdx.o vhdx-endian.o vhdx-log.o
++block-obj-n += quorum.o
++block-obj-n += blkdebug.o blkverify.o blkreplay.o
+ block-obj-$(CONFIG_PARALLELS) += parallels.o
+ block-obj-y += blklogwrites.o
+ block-obj-y += block-backend.o snapshot.o qapi.o
+@@ -23,7 +24,7 @@ block-obj-y += null.o mirror.o commit.o
+ block-obj-y += throttle-groups.o
+ block-obj-$(CONFIG_LINUX) += nvme.o
+ 
+-block-obj-y += nbd.o nbd-client.o
++block-obj-n += nbd.o nbd-client.o
+ block-obj-$(CONFIG_SHEEPDOG) += sheepdog.o
+ block-obj-$(CONFIG_LIBISCSI) += iscsi.o
+ block-obj-$(if $(CONFIG_LIBISCSI),y,n) += iscsi-opts.o

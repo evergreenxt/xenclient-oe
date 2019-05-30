@@ -1,0 +1,936 @@
+#!/bin/sh
+#
+# Copyright (c) 2013 Citrix Systems, Inc.
+# 
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+
+# attempt to start tcsd if it's not already running
+# return 0 if tcsd is running or successfully started
+#        1 otherwise
+# A return status of 1 indicates the TPM driver is not loaded.
+# In this state the TPM is disabled ... or the platform doesn't have one :)
+
+clean_old_tpm_files () {
+    [ -e /boot/system/tpm/config.tss ] && rm /boot/system/tpm/config.tss
+    [ -e /boot/system/tpm/config.tss.pcrs ] && rm /boot/system/tpm/config.tss.pcrs
+    [ -e /boot/system/tpm/config.tss.sha256 ] && rm /boot/system/tpm/config.tss.sha256
+    [ -e /boot/system/tpm/config.tss.pub.sha256 ] && rm /boot/system/tpm/config.tss.pub.sha256
+}
+
+is_tpm_2_0 () {
+    # See the TPM chardev driver implementation:
+    # https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git/tree/drivers/char/tpm/tpm-sysfs.c?h=v4.14.34#n296
+    # Assuming a TPM has already been detected, absence of the sysfs entry
+    # means TPM 2.0.
+    # This is still valid on Linux 4.16.
+    if [ ! -e /sys/class/tpm/tpm0/device/caps ]; then
+        return 0
+    fi
+
+    # Sysfs caps entry contains TPM manufacturer and version info.
+    # https://www.kernel.org/doc/Documentation/ABI/stable/sysfs-class-tpm
+    local tpm_ver="$(awk '/TCG version:/ { print $3 }' /sys/class/tpm/tpm0/device/caps)"
+
+    [ "${tpm_ver}" = "2.0" ]
+}
+
+pcr_bank_exists () {
+    local alg_in=$1
+
+    banks=$(tpm2_pcrlist -s | cut -d ':' -f 2)
+    for bank in $banks; do
+        alg=$(echo $bank | cut -d '(' -f 1)
+        if [ "$alg" = $alg_in ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# For comparison, normalize to 0x-prefixed, lowercase, unpadded, hex values
+# e.g. 0x000B -> 0xb
+tpm2_normalize() {
+    printf "%#x" $1
+}
+
+OXT_HANDLE_SHA256=0x81000000
+# SHA1 currently unused
+OXT_HANDLE_SHA1=0x81000001
+OXT_HANDLES="${OXT_HANDLE_SHA256}"
+OXT_HANDLES_COUNT="$( echo "${OXT_HANDLES}" | wc -w )"
+
+# TPM2 Object attribute bits
+TPMA_OBJECT_FIXEDTPM=0x00000002
+TPMA_OBJECT_FIXEDPARENT=0x00000010
+TPMA_OBJECT_ADMINWITHPOLICY=0x00000080
+TPMA_OBJECT_NODA=0x00000400
+OXT_SEAL_ATTR=$( tpm2_normalize $(( TPMA_OBJECT_FIXEDTPM | \
+                                    TPMA_OBJECT_FIXEDPARENT | \
+                                    TPMA_OBJECT_ADMINWITHPOLICY | \
+                                    TPMA_OBJECT_NODA )) )
+
+# TPM2 hash algorithms
+TPM_ALG_SHA1=0x4
+TPM_ALG_SHA256=0xb
+TPM_ALG_SHA384=0xc
+TPM_ALG_SHA512=0xd
+TPM_ALG_SM3_256=0x12
+
+# TPM2 encryption algorithms
+TPM_ALG_RSA=0x1
+TPM_ALG_KEYEDHASH=0x8
+TPM_ALG_ECC=0x23
+TPM_ALG_SYMCIPHER=0x25
+
+handle_type() {
+    case "$1" in
+        ${OXT_HANDLE_SHA256}) echo "rsa" ;;
+        ${OXT_HANDLE_SHA1})   echo "rsa" ;;
+        *)                    echo "INVALID_TYPE" ;;
+    esac
+}
+
+handle_alg() {
+    case "$1" in
+        ${OXT_HANDLE_SHA256}) echo "sha256" ;;
+        ${OXT_HANDLE_SHA1})   echo "sha1" ;;
+        *)                    echo "INVALID_ALG" ;;
+    esac
+}
+
+alg_to_handle () {
+    alg=$1
+    case $alg in
+        ${TPM_ALG_SHA256})
+            echo "${OXT_HANDLE_SHA256}"
+            ;;
+        ${TPM_ALG_SHA1})
+            echo "${OXT_HANDLE_SHA1}"
+            ;;
+    esac
+}
+
+tcsd_start() {
+    is_tpm_2_0
+    local tpm2=$?
+    if [ "${tpm2}" -ne 0 ];
+    then
+        local ret=1
+        /etc/init.d/trousers status > /dev/null
+        if [ $? -ne 0 ]; then
+            /etc/init.d/trousers start > /dev/null
+            sleep 1
+            /etc/init.d/trousers status > /dev/null
+            [ $? -ne 0 ] && return 1
+        fi
+    fi
+    return 0
+}
+# Function to determin whether or not the TPM is active
+# returns 0 if active
+#         1 if inactive
+#         2 if indeterminant
+tpm_is_active() {
+    local tpm="$(find /sys/class -name tpm0 2>/dev/null)/device"
+    local active
+    local msg
+    local val
+
+    if is_tpm_2_0 ; then
+        msg=$(tpm2_getcap --capability=properties-variable 2>&1) || \
+            return 2
+
+        # Ensure Hierarchies are enabled; otherwise the TPM2 is unusable.
+        for v in phEnable shEnable ehEnable phEnableNV; do
+            val="$( echo "${msg}" | awk "/${v}:/ { print \$2 }" )"
+            [ "${val}" = "set" ] || return 1
+        done
+
+        return 0
+    fi
+
+    active="$(cat ${tpm}/active)" || return 2
+
+    if [ "${active}" -eq 1 ]; then
+        return 0
+    fi
+
+    return 1
+}
+# Function to determine whether or not the TPM is enabled
+# return 0 if TPM is enabled
+#        1 if TPM is disabled
+#        2 if indeterminant
+tpm_is_enabled() {
+    local tpm="$(find /sys/class -name tpm0 2>/dev/null)/device"
+    local state=""
+
+    if is_tpm_2_0 ; then
+        tpm2_getcap --capability=properties-fixed 1>/dev/null 2>&1
+        return $?
+    else
+        state=$(cat ${tpm}/enabled)
+        if [ $? -ne 0 ]; then
+            return 2
+        fi
+    fi
+
+    [ $state -eq 1 ] && state=0 || state=1
+
+    return $state
+}
+
+# Function to determine if a single tpm2 handle is correct
+# returns 0 if the handle is defined
+#         1 if the handle is not defined
+#         2 if the handle is incorrect
+tpm2_handle_defined() {
+    local oxt_handle="$1"
+    local handles=$( tpm2_listpersistent )
+    local handle=$( echo "${handles}" | \
+                    sed -nr "/persistent-handle\[[0-9]+\]:${oxt_handle}/p" )
+    if [ -z "${handle}" ]; then
+            return 1
+    fi
+
+    local h_type=$( echo "${handles}" | cut -d ' ' -f 2 | cut -d ':' -f 2 )
+    local alg=$( echo "${handles}" | cut -d ' ' -f 3 | cut -d ':' -f 2)
+
+    if [ "${h_type}" != "$( handle_type "${oxt_handle}" )" -o \
+            "${alg}" != "$( handle_alg "${oxt_handle}" )" ]; then
+        return 2
+    fi
+
+    return 0
+}
+
+# Function to determine if we have all the correct tpm2 handles
+# returns 0 if the handles are defined
+#         1 if the handles are not defined
+#         2 if the handles are incorrect
+tpm2_handles_defined() {
+    local num_handles=$( tpm2_listpersistent | wc -l )
+
+    if [ "${num_handles}" -eq 0 ]; then
+        return 1
+    fi
+
+    if [ "${num_handles}" -ne ${OXT_HANDLES_COUNT} ]; then
+        return 2
+    fi
+
+    local handle
+    for handle in ${OXT_HANDLES}; do
+        tpm2_handle_defined ${handle} || return $?
+    done
+
+    return 0
+}
+
+# Function to determine if we have the correct tpm handles
+# returns 0 if the handles are defined
+#         1 if the handles are not defined
+#         2 if the handles are incorrect
+tpm_handles_defined() {
+    #Return success for TPM1
+    is_tpm_2_0 || return 0
+
+    tpm2_handles_defined
+}
+
+tpm2_clear_handle() {
+    local passwd="$( cat $1 )"
+    local handle="$2"
+
+    tpm2_evictcontrol -A o -H "${handle}" -S "${handle}" -P "${passwd}"
+}
+
+# Clear out all the TPM handles.  This should help avoid issues with a TPM2's
+# limited number of handles.
+tpm_clear_handles() {
+    local passwd="$1"
+    local handles
+    local handle
+
+    is_tpm_2_0 || return 0
+
+    handles=$( tpm2_listpersistent | \
+               cut -d ' ' -f 1 | \
+               cut -d ':' -f 2 )
+    for handle in ${handles} ; do
+        tpm2_clear_handle "${passwd}" "${handle}"
+    done
+}
+
+# Creates TPM2 handles.  Already existing handles are cleared before
+# recreating.
+tpm_create_handles() {
+    local passwd="$1"
+    local ret
+
+    is_tpm_2_0 || return 0
+
+    tpm2_handles_defined
+    case $? in
+        0) return 0;;
+        1) ;; # not defined
+        2) tpm_clear_handles "${passwd}" ;;
+        *) echo "tpm_create_handle: handles in unexpected state!" 1>&2
+           return 1
+           ;;
+    esac
+
+    tpm2_create_handle "${passwd}"
+}
+
+# Function to determine whether or not the TPM is owned.
+# returns 0 if TPM is owned
+#         1 if TPM is not owned
+#         2 if indeterminant
+tpm_is_owned() {
+    local tpm="$(find /sys/class -name tpm0 2>/dev/null)/device"
+    local state=""
+
+    is_tpm_2_0
+    local tpm2=$?
+    if [ "${tpm2}" -eq 0 ];
+    then
+        tpm2_getcap --capability=properties-variable | grep -q 'ownerAuthSet:[[:space:]]\+set'
+        ret=$?
+        if [ "${ret}" -eq 0 ]; then
+            state=1
+        fi
+    else
+        state=$(cat ${tpm}/owned)
+        if [ $? -ne 0 ]; then
+            return 2
+        fi
+    fi
+
+    [ $state -eq 1 ] && state=0 || state=1
+
+    return $state
+}
+# Function to determin whether or not the TPM owner password is the well known
+#   secret of 20 bytes of 0's
+# returns 0 if owner password is WKS
+#         1 if owner password is not WKS
+#         2 if indeterminant
+#         3 if TPM is in an authentication time-out period
+tpm_is_owner_wks() {
+    local ret=0
+    local msg=""
+
+    is_tpm_2_0
+    local tpm2=$?
+    if [ "${tpm2}" -eq 0 ];
+    then
+        return $ret
+    fi
+
+    msg=$(tpm_setenable -z -s 2>&1)
+    if [ $? -ne 0 ]; then
+        case "$msg" in
+            *TPM\ is\ deactivated) ret=2 ;;
+            *TPM\ is\ disabled) ret=2 ;;
+            *Authentication\ failed) ret=1 ;;
+            *is\ in\ some\ time-out\ period) ret=3 ;;
+            *No\ SRK) ret=1 ;;
+            *) ret=2 ;;
+        esac
+    fi
+    return $ret
+}
+
+tpm2_check_password() {
+    local passwd="$1"
+    local msg
+
+    msg=$( tpm2_takeownership -O $(cat "${passwd}") -o $(cat "${passwd}") \
+                              -E $(cat "${passwd}") -e $(cat "${passwd}") \
+                              -L $(cat "${passwd}") -l $(cat "${passwd}") \
+                              2>&1 | head -n 1 )
+    [ $? -eq 0 ] && return 0
+
+    msg=${msg#*TPM Error:}
+    case "${msg}" in
+        0x9a2) #TPM_RC_BAD_AUTH
+            return 1
+            ;;
+        0x98e) #TPM_RC_AUTH_FAIL
+            return 1
+            ;;
+        0x921) #TPM_RC_LOCKOUT DA protection
+            return 3
+            ;;
+    esac
+
+    return 2
+}
+
+# Function to determine if we have the TPM owner password
+# returns 0 if owner password is ${passwd}'s contents
+#         1 if owner password is not in ${passwd}
+#         2 if indeterminant
+#         3 if TPM is in an authentication time-out period
+tpm_check_owner_password() {
+    local passwd="$1"
+    local ret=0
+    local msg=""
+
+    is_tpm_2_0
+    local tpm2=$?
+    if [ "${tpm2}" -eq 0 ];
+    then
+        tpm2_check_password "${passwd}"
+        return $?
+    fi
+
+    msg=$(cat "${passwd}" | tpm_setenable --stdin -s 2>&1)
+    if [ $? -ne 0 ]; then
+        case "$msg" in
+            *Authentication\ failed) ret=1 ;;
+            *is\ in\ some\ time-out\ period) ret=3 ;;
+            *) ret=2 ;;
+        esac
+    fi
+    return $ret
+}
+# Function to determine whether or not the TPM SRK pasword is the well known
+#   20 bytes of 0's.
+# returns 0 if TPM SRK passwd is WKS
+#         1 if TPM SRK passwd is not WKS
+#         2 if indeterminant
+#         3 if TPM is in an authentication time-out period
+tpm_is_srk_wks() {
+    local ret=0
+    local msg=""
+
+    is_tpm_2_0
+    local tpm2=$?
+    if [ "${tpm2}" -eq 0 ];
+    then
+        return $ret
+    fi
+
+    msg=$(echo "data" | tpm_sealdata -z 2>&1)
+    if [ $? -ne 0 ]; then
+        case "$msg" in
+            *TPM\ is\ deactivated) ret=2 ;;
+            *TPM\ is\ disabled) ret=2 ;;
+            *Authentication\ failed) ret=1 ;;
+            *is\ in\ some\ time-out\ period) ret=3 ;;
+            *No\ SRK) ret=1 ;;
+            *No\ EK) ret=1 ;;
+            *) ret=2 ;;
+        esac
+    fi
+    return $ret
+}
+# Function to determine whether or not the TPM has an EK
+# NOTE: 99.99% of the platforms in this world ship with an EK from the factory.
+#       The only systems I've seen w/o EKs have been Intell branded boards.
+# returns 0 if TPM has an EK
+#         1 if TPM does not have an EK
+#         2 if indeterminant
+#         3 if TPM is in an authentication time-out period
+tpm_has_ek() {
+    local ret=0
+    local msg=""
+
+    #tpm2.0 most likely has EK. TODO: figure out if I need to verify this.
+    is_tpm_2_0
+    local tpm2=$?
+    if [ "${tpm2}" -eq 0 ];
+    then
+        ret=0
+    else
+        msg=$(echo "data" | tpm_sealdata -z 2>&1)
+        if [ $? -ne 0 ]; then
+            case "$msg" in
+                *TPM\ is\ deactivated) ret=2 ;;
+                *TPM\ is\ disabled) ret=2 ;;
+                *No\ SRK | *Authentication\ failed | *Handle\ is\ incorrect) ;;
+                *is\ in\ some\ time-out\ period) ret=3 ;;
+                *No\ EK)  ret=1 ;;
+                *) ret=2 ;;
+            esac
+        fi
+    fi
+    return $ret
+}
+
+#Taking ownership for tpm2 is slightly more complicated. Encapsulate this process
+#in its own function, checking err after each critical operation.
+tpm2_ownership () {
+    local passwd=$( cat $1 )
+
+    #Taking endoresement password AND lockout password to fully own tpm
+    err=$(tpm2_takeownership -o "${passwd}" -e "${passwd}" -l "${passwd}" 2>&1)
+    ret=$?
+    [ ${ret} -ne 0 ] && echo ${err} && return ${ret}
+
+    tpm2_create_handle $1
+}
+
+tpm2_create_handle() {
+    local passwd=$( cat $1 )
+
+    #Create our primary object
+    handle=$(echo -n "${passwd}" | tpm2_createprimary -H o -g ${TPM_ALG_SHA256} -G ${TPM_ALG_RSA} -P | grep Handle | cut -d ':' -f 2)
+    ret=$?
+    [ ${ret} -ne 0 ] && echo "Failed to create primary" && return ${ret}
+    #Make it permanent for this measured install
+    err=$(tpm2_evictcontrol -A o -H ${handle} -S $(alg_to_handle "${TPM_ALG_SHA256}") -P "${passwd}" 2>&1)
+    ret=$?
+    [ ${ret} -ne 0 ] && echo ${err} && return ${ret}
+    return 0
+}
+
+# Function to take ownership of the TPM.  Wraps some common functionality to
+#   create an EK and check that we can seal with the well-known SRK.
+# parameter 0: password
+#           1: create EK (true|false)
+# return 0 on success
+#        1 on error
+tpm_take_ownership() {
+    local passwd="$1"
+    local has_ek="${2:-false}"
+
+    is_tpm_2_0
+    local tpm2=$?
+
+    # create EK if necessary
+    case ${has_ek} in
+        true) ;;
+        false)
+            err=$(tpm_createek 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "error creating EK for TPM: ${err}" >&2
+                return 1
+            fi
+            ;;
+        *)
+            echo "invalid parameter for EK: ${has_ek}" >&2
+            return 1
+    esac
+
+    if [ "${tpm2}" -eq 0 ];
+    then
+        err=$(tpm2_ownership ${passwd})
+    else
+        # take ownership of TPM
+        err=$(tpm_takeownership --srk-well-known --stdin 2>&1 < "${passwd}")
+    fi
+
+    if [ $? -ne 0 ]; then
+        echo "error taking ownership of TPM: ${err}" >&2
+        return 1
+    fi
+
+    #sealing data with wks is tpm 1.2 only
+    if [ "${tpm2}" -eq 1 ];
+    then
+        # check to be sure we can seal data with the well-known-key
+        err=$(echo data | tpm_sealdata -z 2>&1 >/dev/null)
+        [ $? -ne 0 ] && {
+            echo "Test to seal data with well-known SRK failed with error: ${err}" >&2
+            return 1
+        }
+    fi
+    return 0
+}
+
+# Write a tboot policy to a TPM2 NV index
+# will only write if necessary
+# $1 - New tboot policy file
+# $2 - NV index
+# $3 - TPM password
+# Standard 0 success return value
+tpm2_write_tboot_policy() {
+    local policy="$1"
+    # remove leading 0s from hex index to match tpm2_nvlist output
+    local tboot_idx="$( tpm2_normalize $2 )"
+    local password="$3"
+    local old_policy="${policy}.old"
+    local polsize=$(cat "${policy}" | wc -c)
+
+    # To limit scope, these TPM2 globals values are defined locally
+    # TPM2 permanent handles
+    local TPM_RH_OWNER=0x40000001
+    # TPM2 NVRAM attributes
+    local TPMA_NV_TPMA_NV_WRITTEN=0x20000000
+    local TPMA_NV_TPMA_NV_OWNERWRITE=0x00000002
+    local TPMA_NV_TPMA_NV_AUTHWRITE=0x00000004
+    local TPMA_NV_TPMA_NV_OWNERREAD=0x00020000
+    local TPMA_NV_TPMA_NV_AUTHREAD=0x00040000
+    local TBOOT_NV_ATTRIB="$( tpm2_normalize $(( TPMA_NV_TPMA_NV_OWNERWRITE | \
+                                                 TPMA_NV_TPMA_NV_AUTHWRITE  | \
+                                                 TPMA_NV_TPMA_NV_OWNERREAD  | \
+                                                 TPMA_NV_TPMA_NV_AUTHREAD )) )"
+
+    local idx=$( tpm2_nvlist | sed -n "/${tboot_idx}:/,/^$/p" | sed "/^$/d" )
+    local attr=$( echo "${idx}" | \
+                  sed -n "/attributes:/,/value:/p" | \
+                  awk -F: '/value:/ { print $2 }' | \
+                  tr -d ' ' )
+    local size=$( echo "${idx}" | \
+                  awk -F: '/size:/ { print $2 }' | \
+                  tr -d ' ' )
+
+    # Read the current contents into a temp file.
+    # tpm2_nvread could fail, and this ends up being a big pipeline to
+    # create an empty file, but that is fine for below.
+    tpm2_nvread -x "${tboot_idx}" -a "${TPM_RH_OWNER}" -P "${password}" \
+                -s "${size}" -o 0 2>/dev/null \
+        | tail -n 1 | tr -d ' ' | hex2bin > "${old_policy}"
+
+    if diff -q "${old_policy}" "${policy}" ; then
+        rm "${old_policy}"
+        return 0
+    fi >/dev/null 2>&1
+
+    rm "${old_policy}"
+
+    if [ "${size}" != "${polsize}" -o \
+         "$( tpm2_normalize $(( attr & ~TPMA_NV_TPMA_NV_WRITTEN )) )" != \
+	     "${TBOOT_NV_ATTRIB}" ]; then
+        tpm2_nvrelease -x "${tboot_idx}" -a "${TPM_RH_OWNER}" -P "${password}" \
+                       >/dev/null 2>&1
+        tpm2_nvdefine -x "${tboot_idx}" -a "${TPM_RH_OWNER}" -P "${password}" \
+                      -s "${polsize}" -t "${TBOOT_NV_ATTRIB}" >/dev/null 2>&1 \
+            || return 1
+    fi
+
+    tpm2_nvwrite -x "${tboot_idx}" -a "${TPM_RH_OWNER}" -P "${password}" \
+                 "${policy}" >/dev/null 2>&1
+}
+
+tpm_get_pcr() {
+    local pcr="${1}"
+
+    is_tpm_2_0
+    if [ $? -eq 0 ]; then
+        if pcr_bank_exists "sha256"; then
+            echo "$(tpm2_pcrlist -L sha256:${pcr} | tail -1 | cut -f2 -d: | tr 'A-Z' 'a-z' | tr -d \ )"
+        else
+            echo "$(tpm2_pcrlist -L sha1:${pcr} | tail -1 | cut -f2 -d: | tr 'A-Z' 'a-z' | tr -d \ )"
+        fi
+    else
+        local tpm="$(find /sys/class -name tpm0 2>/dev/null)/device"
+
+        echo "$(grep PCR-${pcr} ${tpm}/pcrs|cut -f2 -d:|tr 'A-Z' 'a-z'|tr -d \ )"
+    fi
+}
+
+tpm_seal() {
+    local root=""
+    local hashalg="sha1"
+    local pcrs=""
+    local pcr_params=""
+    local OPTIND
+    local opt
+
+    while getopts ":a:r:p:" opt; do
+        case "${opt}" in
+            a)
+                hashalg=${OPTARG}
+            ;;
+            r)
+                root=${OPTARG}
+            ;;
+            p)
+                pcrs="${pcrs} ${OPTARG}"
+            ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+    local secret="${root}/${1}"
+    local tss="${root}/${2}"
+
+    for p in ${pcrs}; do
+        if [[ "${tpm2}" -eq 0 ]]; then
+            pcr_params="${pcr_params} -r ${p}"
+        else
+            pcr_params="${pcr_params} -p ${p}"
+        fi
+    done
+
+    is_tpm_2_0
+    if [ $? -eq 0 ]; then
+        pcr_bank_exists "${hashalg}"
+        [ $? -eq 0 ] || return 1
+
+        # pcr_params starts with -p or -r, but that's okay because
+        # echo only honors flags -n -e & -E
+        echo "${pcr_params}" > ${tss}.pcrs
+
+        case $hashalg in
+        sha1)
+            sealout=$(tpm2_sealdata -H ${OXT_HANDLE_SHA1} -I ${secret} \
+                -O ${tss}.sha1 -o ${tss}.pub.sha1 -g ${TPM_ALG_SHA1} \
+                -G ${TPM_ALG_KEYEDHASH} -b ${OXT_SEAL_ATTR} ${pcr_params} 2>&1)
+            return $?
+        ;;
+        sha256)
+            sealout=$(tpm2_sealdata -H ${OXT_HANDLE_SHA256} -I ${secret} \
+                -O ${tss}.sha256 -o ${tss}.pub.sha256 -g ${TPM_ALG_SHA256} \
+                -G ${TPM_ALG_KEYEDHASH} -b ${OXT_SEAL_ATTR} ${pcr_params} 2>&1)
+            return $?
+        ;;
+        *)
+            return 1
+        ;;
+        esac
+    else
+        sealout=$(tpm_sealdata_sa -i ${secret} -o ${tss}.sha1 \
+            -z ${pcr_params} 2>&1)
+        return $?
+    fi
+}
+
+tpm_forward_seal() {
+    local root=""
+    local forward_values=""
+    local hashalg="sha1"
+    local pcrs=""
+    local pcr_params=""
+    local OPTIND
+    local opt
+    local p
+    is_tpm_2_0
+    local tpm2=$?
+
+    while getopts ":a:r:p:" opt; do
+        case "${opt}" in
+            a)
+                hashalg=${OPTARG}
+            ;;
+            r)
+                root=${OPTARG}
+            ;;
+            p)
+                pcrs="${pcrs} ${OPTARG}"
+            ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+    local key="${root}/${1}"
+    local tss="${root}/${2}"
+
+    for p in ${pcrs}; do
+        if [[ "${tpm2}" -eq 0 ]]; then
+            pcr_params="${pcr_params} -r ${p}"
+        else
+            pcr_params="${pcr_params} -p ${p}"
+        fi
+    done
+
+    if [ "${tpm2}" -eq 0 ];
+    then
+        seal_file=${key}
+        clean_old_tpm_files
+        if pcr_bank_exists "sha256"; then
+            # We only want the PCRs numbers and not the forward seal values
+            echo "${pcr_params}" | \
+                sed -e 's/:[0-9a-zA-Z]\{64\}//g' > ${tss}.pcrs
+            tpm2_sealdata -H ${OXT_HANDLE_SHA256} -I ${seal_file} \
+                          -O ${tss}.sha256 -o ${tss}.pub.sha256 \
+                          -g ${TPM_ALG_SHA256} -G ${TPM_ALG_KEYEDHASH} \
+                          -b ${OXT_SEAL_ATTR} ${pcr_params} 2>&1
+            err=$?
+            if [ $err -ne 0 ]; then return $err; fi
+        fi
+        [ -e ${tss} ] || [ -e ${tss}.sha256 ] && return 0
+        return 1
+    else
+        /etc/init.d/trousers status > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            tpm_sealdata_sa -i ${key} -o ${tss} -z ${pcr_params} 2>&1
+            return $?
+        else
+            tpm_sealdata -i ${key} -o ${tss} -z ${pcr_params} 2>&1
+            return $?
+        fi
+    fi
+}
+
+tpm_unseal() {
+    local root=""
+    local hashalg="sha1"
+    local pcrs=""
+    local pcr_params=""
+    local OPTIND
+    local opt
+
+    while getopts ":a:r:p:" opt; do
+        case "${opt}" in
+            a)
+                hashalg=${OPTARG}
+            ;;
+            r)
+                root=${OPTARG}
+            ;;
+            p)
+                pcrs="${pcrs} ${OPTARG}"
+            ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+    local tss="${root}/${1}"
+
+    is_tpm_2_0
+    if [ $? -eq 0 ]; then
+        for p in ${pcrs}; do
+            pcr_params="${pcr_params} -r ${p}"
+        done
+
+        pcr_bank_exists "${hashalg}"
+        [ $? -eq 0 ] || return 1
+
+        case $hashalg in
+        sha1)
+            tpm2_unsealdata -H ${OXT_HANDLE_SHA1} -n "${tss}.sha1" \
+                            -u "${tss}.pub.sha1" -g ${TPM_ALG_SHA1} \
+                            $( < ${tss}.pcrs ) 2>/dev/null
+            return $?
+        ;;
+        sha256)
+            tpm2_unsealdata -H ${OXT_HANDLE_SHA256} -n "${tss}.sha256" \
+                            -u "${tss}.pub.sha256" -g ${TPM_ALG_SHA256} \
+                            $( < ${tss}.pcrs ) 2>/dev/null
+            return $?
+        ;;
+        *)
+            return 1
+        ;;
+        esac
+    else
+        tpm_unsealdata_sa -z -i $tss 2>/dev/null
+        ret=$?
+    fi
+
+}
+
+QUIRK_D="/usr/lib/tpm-scripts/quirks.d"
+
+[ -d "${QUIRK_D}" ] || {
+    echo "no quirk.d directory: ${QUIRK_D}, fail" >&2
+    exit 1
+}
+
+# run *-detect.sh scripts from QUIRK_D directory
+# execute callbacks based on quirk script exit status
+# return status
+#   0 : either no quirks or only quirks with workarounds
+#   1 : platform has fatal quirks (quirks with no workarounds)
+#       or caller has chosen to make non-fatal quirks fatal
+#   2 : error condition: unexpected value returned from quirk detect script
+#   3 : missing / bad parameter
+quirk_detect () {
+    local fptr_info="$1"
+    local fptr_fatal="$2"
+    local msg=""
+    local ret=0
+
+    [ -z ${fptr_info} ] && {
+        echo "No quirk \"info\" callback provided."
+        return 3
+    }
+    [ -z ${fptr_fatal} ] && {
+        echo "No quirk \"fatal\" callback provided."
+        return 3
+    }
+
+    for detect in $(ls -1 "${QUIRK_D}"/*-detect.sh); do
+        msg=$(${detect} 2>&1)
+        case $? in
+            # no quirk
+            0)  ;;
+            # quirk: work around exists, call 'info' function
+            # exit if 'info' function returns anything but 0
+            #   this is a way for calling script to reject quirk work around
+            1)  ${fptr_info} "${msg}"
+                ret=$?
+                [ ${ret} -ne 0 ] && return "${ret}"
+                ;;
+            # quirk: no work around
+            2)  ${fptr_fatal} "${msg}"
+                ret=$?
+                [ ${ret} -eq 0 ] && return 1
+                echo "ignoring fatal quirk, this is a bad idea ..."
+                ;;
+            # error condition, bad quirk script
+            *)  echo "unexpected return value from quirk detect script: ${detect}" >&2
+                return 2
+                ;;
+        esac
+    done
+    return 0
+}
+
+# run *-fix.sh scripts from QUIRK_D directory
+# return status
+#   0 : all fixes successful
+#   1 : fix script returned non-zero status, error message is sent to stderr
+#   2 : internal error
+quirk_fix () {
+    local root="${1:-/}"
+    local ignore_errs="${2:-false}"
+    local detect=""
+    local fix=""
+    local quirk_name=""
+    local msg=""
+
+    [ -d "${root}" ] || {
+        echo "quirk_fix root param is not a directory: ${root}" >&2
+        return 2
+    }
+
+    for fix in $(ls -1 "${QUIRK_D}"/*-fix.sh); do
+        # run detect script
+        quirk_name=$(echo "${fix}" | sed -e "s&${QUIRK_D}/\(.*\)-fix.sh&\1&")
+        detect="${QUIRK_D}/${quirk_name}-detect.sh"
+        [ -x "${detect}" ] || {
+            echo "Quirk ${quirk_name} has no detect script, abort." >&2
+            return 0
+        }
+        msg=$(${detect} 2>&1)
+        case $? in
+            0)  break ;; # quirk doesn't apply, break
+            1)  ;;       # quirk does apply, NOOP
+            2)  echo "Quirk deetct script ${detect} reports quirk is fatal but a fix script exists.  Not applying fix.  Consult quirk documentation."
+                break
+                ;;
+            *)  echo "Error code returned from quirk detect script: ${detect}."
+                break
+                ;;
+        esac
+        # run fix script
+        msg=$(${fix} "${root}" 2>&1)
+        case $? in
+            0)  ;;
+            *)  [ "${ignore_errs}" != "true" ] && {
+                    echo "Error returned by ML Quirk fix script: ${fix}.  Error message: ${msg}" >&2
+                    return 1
+                }
+                ;;
+        esac
+    done
+}

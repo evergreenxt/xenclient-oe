@@ -29,7 +29,11 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl.h
 +++ b/tools/libxl/libxl.h
+<<<<<<< HEAD
 @@ -1809,6 +1809,9 @@ libxl_device_usbdev_list(libxl_ctx *ctx,
+=======
+@@ -1924,6 +1924,9 @@ libxl_device_usbdev_list(libxl_ctx *ctx,
+>>>>>>> upstream/stable-9
  
  void libxl_device_usbdev_list_free(libxl_device_usbdev *list, int nr);
  
@@ -60,6 +64,7 @@ PATCHES
  char *libxl__blktap_devpath(libxl__gc *gc,
                              const char *disk,
                              libxl_disk_format format)
+<<<<<<< HEAD
 @@ -51,7 +63,7 @@ char *libxl__blktap_devpath(libxl__gc *g
      return NULL;
  }
@@ -69,6 +74,8 @@ PATCHES
  {
      char **domids, **vbds;
      char *tp;
+=======
+>>>>>>> upstream/stable-9
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
 @@ -18,7 +18,7 @@
@@ -82,7 +89,11 @@ PATCHES
  
 --- a/tools/libxl/libxl_disk.c
 +++ b/tools/libxl/libxl_disk.c
+<<<<<<< HEAD
 @@ -732,25 +732,139 @@ int libxl_device_disk_getinfo(libxl_ctx
+=======
+@@ -666,25 +666,138 @@ int libxl_device_disk_getinfo(libxl_ctx
+>>>>>>> upstream/stable-9
      return rc;
  }
  
@@ -116,7 +127,7 @@ PATCHES
 +    disk_empty.vdev = libxl__strdup(NOGC, olddisk->vdev);
 +    disk_empty.pdev_path = libxl__strdup(NOGC, "");
 +    disk_empty.is_cdrom = 1;
-+    libxl__device_disk_setdefault(gc, &disk_empty, stubdomid);
++    libxl__device_disk_setdefault(gc, stubdomid, &disk_empty, true);
 +
 +    lock = libxl__lock_domain_userdata(gc, stubdomid);
 +    if (!lock) {
@@ -158,9 +169,7 @@ PATCHES
 +        libxl__xs_rm_checked(gc, t, fe_path);
 +    } while (xs_transaction_end(ctx->xsh, t, false) == false && errno == EAGAIN);
 +
-+    /* cleanup old tap if it's not shared with anyone else */
-+    if(!tapdev_is_shared(gc, tmp))
-+        libxl__device_destroy_tapdisk(gc, tmp, stubdomid);
++    libxl__device_destroy_tapdisk(gc, tmp, stubdomid);
 +
 +    /*write new device */
 +    do {
@@ -175,10 +184,11 @@ PATCHES
 +        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/online", be_path), "%s", "1");
 +        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/state", be_path), "%s", "1");
 +        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/removable", be_path), "%s", "1");
-+        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/mode", be_path), "%s", "1");
++        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/mode", be_path), "%s", "r");
 +        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/frontend-id", be_path), "%u", stubdomid);
 +        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/dev", be_path), "%s", "hdc");
 +        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/tapdisk-params", be_path), "%s", libxl__sprintf(gc, "aio:%s", iso));
++        libxl__xs_printf(gc, t, libxl__sprintf(gc, "%s/hotplug-status", be_path), "%s", "connected");
 +
 +        roperm[0].id = stubdomid;
 +        roperm[1].id = 0;
@@ -229,7 +239,7 @@ PATCHES
  
      disk_empty.format = LIBXL_DISK_FORMAT_EMPTY;
      disk_empty.vdev = libxl__strdup(NOGC, disk->vdev);
-@@ -797,43 +911,18 @@ int libxl_cdrom_insert(libxl_ctx *ctx, u
+@@ -725,43 +838,18 @@ int libxl_cdrom_insert(libxl_ctx *ctx, u
              break;
          }
      }
@@ -240,7 +250,7 @@ PATCHES
          goto out;
      }
  
--    rc = libxl__device_disk_setdefault(gc, disk, domid);
+-    rc = libxl__device_disk_setdefault(gc, domid, disk, false);
 -    if (rc) goto out;
 -
      if (!disk->pdev_path) {
@@ -274,7 +284,7 @@ PATCHES
      /* Note: CTX lock is already held at this point so lock hierarchy
       * is maintained.
       */
-@@ -851,87 +940,41 @@ int libxl_cdrom_insert(libxl_ctx *ctx, u
+@@ -779,85 +867,39 @@ int libxl_cdrom_insert(libxl_ctx *ctx, u
          if (rc) goto out;
      }
  
@@ -302,17 +312,16 @@ PATCHES
 -        rc = libxl__xs_transaction_commit(gc, &t);
 -        if (!rc) break;
 -        if (rc < 0) goto out;
--    }
--
--    rc = libxl__get_domain_configuration(gc, domid, &d_config);
--    if (rc) goto out;
 +    rc = libxl__device_from_disk(gc, domid, disk, &device);
 +    if (rc){
 +        fprintf(stderr, "can't create device from disk\n");
 +        goto out;
-+     }
+     }
  
--    DEVICE_ADD(disk, disks, domid, &disk_saved, COMPARE_DISK, &d_config);
+-    rc = libxl__get_domain_configuration(gc, domid, &d_config);
+-    if (rc) goto out;
+-
+-    device_add_domain_config(gc, &d_config, &libxl__disk_devtype, &disk_saved);
 +    be_path = libxl__device_backend_path(gc, &device);
 +    libxl_path = libxl__device_libxl_path(gc, &device);
  
@@ -370,9 +379,7 @@ PATCHES
  
  out:
 -    libxl__xs_transaction_abort(gc, &t);
-     for (i = 0; i < num; i++)
-         libxl_device_disk_dispose(&disks[i]);
-     free(disks);
+     libxl__device_list_free(&libxl__disk_devtype, disks, num);
      libxl_device_disk_dispose(&disk_empty);
 -    libxl_device_disk_dispose(&disk_saved);
 -    libxl_domain_config_dispose(&d_config);
@@ -381,25 +388,39 @@ PATCHES
  
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
+<<<<<<< HEAD
 @@ -1219,6 +1219,7 @@ _hidden int libxl__device_exists(libxl__
+=======
+@@ -1235,6 +1235,7 @@ _hidden int libxl__device_exists(libxl__
+                                  libxl__device *device);
+>>>>>>> upstream/stable-9
  _hidden int libxl__device_generic_add(libxl__gc *gc, xs_transaction_t t,
          libxl__device *device, char **bents, char **fents, char **ro_fents);
- _hidden char *libxl__device_backend_path(libxl__gc *gc, libxl__device *device);
 +_hidden char *libxl__device_frontend_path(libxl__gc *gc, libxl__device *device);
+<<<<<<< HEAD
  _hidden char *libxl__device_libxl_path(libxl__gc *gc, libxl__device *device);
  _hidden int libxl__parse_backend_path(libxl__gc *gc, const char *path,
                                        libxl__device *dev);
 @@ -1765,6 +1766,9 @@ _hidden char *libxl__blktap_devpath(libx
+=======
+ _hidden char *libxl__domain_device_frontend_path(libxl__gc *gc, uint32_t domid, uint32_t devid,
+                                                  libxl__device_kind device_kind);
+ _hidden char *libxl__device_backend_path(libxl__gc *gc, libxl__device *device);
+@@ -1780,6 +1781,8 @@ _hidden char *libxl__blktap_devpath(libx
+>>>>>>> upstream/stable-9
                                      const char *disk,
                                      libxl_disk_format format);
  
 +_hidden int libxl__get_tap_minor(libxl__gc *gc, libxl_disk_format format, const char *disk);
-+_hidden bool tapdev_is_shared(libxl__gc *gc, const char *params);
 +
  /* libxl__device_destroy_tapdisk:
   *   Destroys any tapdisk process associated with the backend represented
   *   by be_path.
+<<<<<<< HEAD
 @@ -1836,6 +1840,7 @@ _hidden int libxl__qmp_restore(libxl__gc
+=======
+@@ -1848,6 +1851,7 @@ _hidden int libxl__qmp_restore(libxl__gc
+>>>>>>> upstream/stable-9
  /* Set dirty bitmap logging status */
  _hidden int libxl__qmp_set_global_dirty_log(libxl__gc *gc, int domid, bool enable);
  _hidden int libxl__qmp_insert_cdrom(libxl__gc *gc, int domid, const libxl_device_disk *disk);
@@ -409,7 +430,11 @@ PATCHES
  /* Query the bitmap of CPUs */
 --- a/tools/libxl/libxl_qmp.c
 +++ b/tools/libxl/libxl_qmp.c
+<<<<<<< HEAD
 @@ -975,6 +975,17 @@ int libxl__qmp_set_global_dirty_log(libx
+=======
+@@ -1016,6 +1016,17 @@ int libxl__qmp_set_global_dirty_log(libx
+>>>>>>> upstream/stable-9
                             NULL, NULL);
  }
  
@@ -427,6 +452,17 @@ PATCHES
  int libxl__qmp_insert_cdrom(libxl__gc *gc, int domid,
                              const libxl_device_disk *disk)
  {
+<<<<<<< HEAD
+=======
+@@ -1025,6 +1036,7 @@ int libxl__qmp_insert_cdrom(libxl__gc *g
+     QMP_PARAMETERS_SPRINTF(&args, "device", "ide-%i", dev_number);
+ 
+     if (disk->format == LIBXL_DISK_FORMAT_EMPTY) {
++        qmp_parameters_add_bool(gc, &args, "force", true);
+         return qmp_run_command(gc, domid, "eject", args, NULL, NULL);
+     } else {
+         qmp_parameters_add_string(gc, &args, "target", disk->pdev_path);
+>>>>>>> upstream/stable-9
 --- a/tools/libxl/libxl_utils.c
 +++ b/tools/libxl/libxl_utils.c
 @@ -1383,6 +1383,12 @@ int libxl__random_bytes(libxl__gc *gc, u
@@ -444,7 +480,11 @@ PATCHES
   * mode: C
 --- a/tools/libxl/libxl_utils.h
 +++ b/tools/libxl/libxl_utils.h
+<<<<<<< HEAD
 @@ -170,6 +170,8 @@ int libxl_cpumap_to_nodemap(libxl_ctx *c
+=======
+@@ -174,6 +174,8 @@ int libxl_cpumap_to_nodemap(libxl_ctx *c
+>>>>>>> upstream/stable-9
                              const libxl_bitmap *cpumap,
                              libxl_bitmap *nodemap);
  

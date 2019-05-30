@@ -1,9 +1,15 @@
 LIC_FILES_CHKSUM := "file://COPYING;md5=bbb4b1bdc2c3b6743da3c39d03249095"
+require xen-version.inc
 
+<<<<<<< HEAD
 require xen-version.inc
 
 PV = "${XEN_PV}"
 
+=======
+PV = "${XEN_PV}"
+
+>>>>>>> upstream/stable-9
 SRCREV = "${XEN_SRCREV}"
 SRC_URI = "git://xenbits.xen.org/xen.git;branch=${XEN_BRANCH}"
 
@@ -25,11 +31,8 @@ SRC_URI_append = " \
     file://hvm-rtc-refresh-time.patch;patch=1 \
     file://acpi-pm-feature.patch \
     file://xenconsoled-syslog.patch;patch=1 \
-    file://tboot-shutdown-disable-irqs.patch;patch=1 \
     file://Dell-980-txt-shutdown-acpi-access-width.patch;patch=1 \
     file://parse-video-from-mbi.patch;patch=1 \
-    file://cores-per-socket.patch;patch=1 \
-    file://hide-cores-from-cpuid.patch;patch=1 \
     file://openxt-xci-cpuid-signature.patch;patch=1 \
     file://allow-mwait-cstate.patch;patch=1 \
     file://xen-translate.patch;patch=1 \
@@ -50,10 +53,10 @@ SRC_URI_append = " \
     file://openxt-xen-xsmv4vuse.patch \
     file://xenstat-disable-tmem-use.patch;patch=1 \
     file://acpi-slic-support.patch \
-    file://xsm-for-vtd.patch \
     file://tboot-xen-evtlog-support.patch \
     file://disable-cpuid-hle-rtm.patch \
     file://allow-stubdoms-cacheattr-control.patch \
+    file://add-xc-hypercall-page.patch \
     file://libxl-do-not-destroy-in-use-tapdevs.patch \
     file://libxl-syslog.patch \
     file://libxl-RFC-4of7-Add-stubdomain-version-tools-domain-build-info.patch \
@@ -70,7 +73,6 @@ SRC_URI_append = " \
     file://libxl-openxt-helpers.patch \
     file://libxl-openxt-qemu-args.patch \
     file://libxl-openxt-xci-cpuid-signature.patch \
-    file://libxl-pass-qemu-options-through-linux-stubdom-cmdline.patch \
     file://libxl-openxt-tweaks.patch \
     file://libxl-domain-state.patch \
     file://libxl-fixup-cmdline-ops.patch \
@@ -79,7 +81,6 @@ SRC_URI_append = " \
     file://libxl-xenmgr-support.patch \
     file://libxl-move-extra-qemu-args-to-the-end.patch \
     file://libxl-stubdom-options.patch \
-    file://libxl-add-cores-per-socket-support.patch \
     file://libxl-support-hvm-readonly-disks.patch \
     file://libxl-pci-passthrough-fixes.patch \
     file://libxl-vwif-support.patch \
@@ -118,13 +119,24 @@ SRC_URI_append = " \
 =======
     file://libxl-disable-vnc-query-when-disabled.patch \
     file://xl-shutdown-wait-for-domain-death.patch \
+<<<<<<< HEAD
     file://domain-reboot.patch \
+=======
+    file://libxl-allow-save-vnuma.patch \
+    file://domain-reboot.patch \
+    file://libxl-retry-qmp-pci-add.patch \
+>>>>>>> upstream/stable-9
     ${BLKTAP_PATCHQUEUE} \
     file://efi-hardcode-openxt-cfg.patch \
-    file://efi-load-option-support.patch \
+    file://0001-EFI-add-EFI_LOAD_OPTION-support.patch \
     file://shim-support-for-shim-lock-measure.patch \
     file://efi-require-shim.patch \
+<<<<<<< HEAD
 >>>>>>> upstream/stable-8
+=======
+    file://tboot-measure-and-launch-from-xen-efi.patch \
+    file://efi-load-options-no-default-image-name.patch \
+>>>>>>> upstream/stable-9
 "
 
 COMPATIBLE_HOST = 'i686-oe-linux|(x86_64.*).*-linux|aarch64.*-linux'
@@ -133,23 +145,29 @@ PACKAGECONFIG =+ "xsm"
 PACKAGECONFIG =+ "hvm"
 
 S = "${WORKDIR}/git"
+<<<<<<< HEAD
+=======
+
+TUNE_CCARGS := "${@oe.utils.str_filter_out('-msse3', '${TUNE_CCARGS}', d)}"
+>>>>>>> upstream/stable-9
 
 #--
-# Override meta-virtualization's path to seabios:
-PACKAGECONFIG[hvm] = "--with-system-seabios="/usr/share/firmware/bios.bin",--disable-seabios,seabios ipxe vgabios,"
+# Override meta-virtualization's path to seabios and add ovmf:
+PACKAGECONFIG[hvm] = "--with-system-seabios="/usr/share/firmware/bios.bin" --with-system-ovmf="/usr/share/firmware/ovmf.bin",--disable-seabios,seabios ipxe vgabios ovmf,"
 
 #--
 # Modifications to the meta-virtualiation configuration (ref: OXT-1016)
-
-# iproute2 on OpenXT is currently a MACHINE-specific recipe
-# which causes all recipes that DEPEND upon it to be rebuilt for each MACHINE.
-# Drop that apparently-unnecessary dependency here to avoid that.
-
-DEPENDS_remove = "iproute2"
 
 # The stubs and deploy tasks are detected as MACHINE-specific due to the
 # variables that they use. Those tasks are not required here so drop them.
 
 deltask stubs
 deltask deploy
+
+do_configure_append() {
+    if [ ! -e ${STAGING_INCDIR}/bits/long-double-32.h ]; then
+        cp ${STAGING_INCDIR}/bits/long-double-64.h ${STAGING_INCDIR}/bits/long-double-32.h
+        cp ${STAGING_INCDIR}/gnu/stubs-64.h ${STAGING_INCDIR}/gnu/stubs-32.h
+    fi
+}
 #--

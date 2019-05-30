@@ -38,7 +38,11 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_blktap2.c
 +++ b/tools/libxl/libxl_blktap2.c
+<<<<<<< HEAD
 @@ -51,8 +51,33 @@ char *libxl__blktap_devpath(libxl__gc *g
+=======
+@@ -51,13 +51,44 @@ char *libxl__blktap_devpath(libxl__gc *g
+>>>>>>> upstream/stable-9
      return NULL;
  }
  
@@ -64,18 +68,16 @@ PATCHES
 +            }
 +        }
 +    }
-+
-+    return false;
-+}
  
 -int libxl__device_destroy_tapdisk(libxl__gc *gc, const char *params)
++    return false;
++}
++
 +int libxl__device_destroy_tapdisk(libxl__gc *gc, const char *params, uint32_t domid)
  {
      char *type, *disk;
      int err;
-@@ -75,6 +100,12 @@ int libxl__device_destroy_tapdisk(libxl_
-         return ERROR_FAIL;
-     }
+     tap_list_t tap;
  
 +    /* We're using the tapdev. If anybody else also is, we can't destroy it! */
 +    if (tapdev_is_shared(gc, params)) {
@@ -83,12 +85,21 @@ PATCHES
 +        return 0;
 +    }
 +
+<<<<<<< HEAD
      err = tap_ctl_destroy(tap.id, tap.minor);
      if (err < 0) {
          LOGEV(ERROR, -err, "Failed to destroy tap device id %d minor %d",
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
 @@ -759,7 +759,7 @@ int libxl__device_destroy(libxl__gc *gc,
+=======
+     type = libxl__strdup(gc, params);
+ 
+     disk = strchr(type, ':');
+--- a/tools/libxl/libxl_device.c
++++ b/tools/libxl/libxl_device.c
+@@ -795,7 +795,7 @@ int libxl__device_destroy(libxl__gc *gc,
+>>>>>>> upstream/stable-9
      }
  
      if (tapdisk_params)
@@ -99,12 +110,16 @@ PATCHES
      libxl__xs_transaction_abort(gc, &t);
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
+<<<<<<< HEAD
 @@ -1758,7 +1758,7 @@ _hidden char *libxl__blktap_devpath(libx
+=======
+@@ -1770,7 +1770,7 @@ _hidden char *libxl__blktap_devpath(libx
+>>>>>>> upstream/stable-9
   *   by be_path.
   *   Always logs on failure.
   */
 -_hidden int libxl__device_destroy_tapdisk(libxl__gc *gc, const char *params);
 +_hidden int libxl__device_destroy_tapdisk(libxl__gc *gc, const char *params, uint32_t domid);
  
- _hidden int libxl__device_from_disk(libxl__gc *gc, uint32_t domid,
-                                    const libxl_device_disk *disk,
+ /* Calls poll() again - useful to check whether a signaled condition
+  * is still true.  Cannot fail.  Returns currently-true revents. */
