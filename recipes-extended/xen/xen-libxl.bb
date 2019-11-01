@@ -5,7 +5,7 @@ DESCRIPTION = "Xen hypervisor libxl components"
 
 # In OpenXT, multiple recipes are used to build Xen and its components:
 # a 32-bit build of tools ; a 64-bit hypervisor ; a separate blktap
-# build to fix potentially circular dependencies with libv4v and icbinn
+# build to fix potentially circular dependencies with libargo and icbinn
 # and the remainder.
 #
 # This recipe shares a common xen.inc with other recipes.
@@ -90,7 +90,7 @@ EXTRA_OEMAKE += "CONFIG_IOEMU=n"
 EXTRA_OEMAKE += "CONFIG_TESTS=n"
 EXTRA_OEMAKE += "DESTDIR=${D}"
 
-EXTRA_OECONF += " --enable-blktap2 "
+EXTRA_OECONF += " --enable-blktap2 --with-system-ipxe=/usr/share/firmware/82540em.rom "
 
 #Make sure we disable all compiler optimizations to avoid a nasty segfault in the 
 #reboot case.

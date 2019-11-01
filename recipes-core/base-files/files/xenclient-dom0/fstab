@@ -13,7 +13,6 @@ tmpfs       /tmp                    tmpfs       defaults,rootcontext=system_u:ob
 
 tmpfs       /var/volatile           tmpfs       defaults,rootcontext=system_u:object_r:var_t:s0,size=2M         0 0
 tmpfs       /var/cache              tmpfs       defaults,rootcontext=system_u:object_r:var_t:s0,size=100M       0 0
-tmpfs       /var/lock               tmpfs       defaults,rootcontext=system_u:object_r:var_lock_t:s0,size=1M    0 0
 
 # OpenXT read-only root:
 # mountall.sh should take care of these.
@@ -33,6 +32,8 @@ tmpfs                          /var/lib/xen            tmpfs       defaults,root
 tmpfs                          /root/.ssh              tmpfs       defaults,rootcontext=system_u:object_r:ssh_home_t:s0,size=1M                    0 0
 tmpfs                          /mnt/upgrade            tmpfs       defaults,size=1M                                                                0 0
 ramfs                          /mnt/secure             ramfs       context=system_u:object_r:xc_secure_t:s0,size=1M                                0 0
+
+cgroup                         /sys/fs/cgroup          cgroup      defaults                                                                        0 0
 
 /dev/mapper/log                /var/log                ext4        errors=remount-ro,noatime                                                       1 2
 /dev/mapper/cores              /var/cores              ext4        errors=remount-ro,noatime,rootcontext=system_u:object_r:var_core_t:s0           1 3
