@@ -68,7 +68,7 @@ PATCHES
 +_hidden int libxl__device_pci_destroy_all(libxl__gc *gc, uint32_t domid, libxl_pci_dev_wrap **pciw);
  _hidden bool libxl__is_igd_vga_passthru(libxl__gc *gc,
                                          const libxl_domain_config *d_config);
-+_hidden int libxl__device_pci_reset(libxl__gc *gc, unsigned int domain,
++_hidden int libxl__device_pci_reset(libxl__gc *gc, unsigned int domain, 
 +                                    unsigned int bus, unsigned int dev, unsigned int func);
  
  /* from libxl_dtdev */
@@ -165,7 +165,7 @@ PATCHES
 +        for (int i = 0; i < dis->pciw->num_devs; i++) {
 +            libxl_device_pci *pcidev = &dis->pciw->pcidevs[i];
 +            libxl__device_pci_reset(gc, pcidev->domain, pcidev->bus, pcidev->dev, pcidev->func);
-+        }
++        } 
 +        free(dis->pciw->pcidevs);
 +        free(dis->pciw);
 +    }
