@@ -1,0 +1,433 @@
+--- a/chardev/Makefile.objs
++++ b/chardev/Makefile.objs
+@@ -23,3 +23,4 @@ baum.o-cflags := $(SDL_CFLAGS)
+ baum.o-libs := $(BRLAPI_LIBS)
+ 
+ common-obj-$(CONFIG_SPICE) += spice.o
++chardev-obj-$(CONFIG_XEN) += char-argo.o
+--- /dev/null
++++ b/chardev/char-argo.c
+@@ -0,0 +1,345 @@
++/*
++ * QEMU System Emulator
++ *
++ * Copyright (c) 2003-2008 Fabrice Bellard
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++#include "qemu/osdep.h"
++#include "chardev/char.h"
++#include "io/channel-file.h"
++#include "io/channel-socket.h"
++#include "qemu/option.h"
++#include "qapi/error.h"
++
++#include "chardev/char-io.h"
++#include "sys/ioctl.h"
++#include <libargo.h>
++#include <sys/param.h>
++
++
++/***********************************************************/
++/* Argo console for QMP */
++
++#define ARGO_TYPE 'W'
++#define ARGOIOCSETRINGSIZE       _IOW (ARGO_TYPE,  1, uint32_t)
++
++#define XEN_ARGO_MSG_SLOT_SIZE 0x10
++#define XEN_ARGO_ROUNDUP(a) roundup((a), XEN_ARGO_MSG_SLOT_SIZE)
++
++#define ARGO_QH_PORT 5100
++#define ARGO_CHARDRV_PORT 15100
++#define ARGO_CHARDRV_RING_SIZE \
++  (XEN_ARGO_ROUNDUP((((4096)*4) - sizeof(xen_argo_ring_t)-XEN_ARGO_ROUNDUP(1))))
++
++#define ARGO_CHARDRV_NAME  "[argo-chardrv]"
++
++#define ARGO_MAGIC_CONNECT    "live"
++#define ARGO_MAGIC_DISCONNECT "dead"
++
++typedef struct {
++    Chardev parent;
++    QIOChannel *ioc;
++    xen_argo_addr_t remote_addr;
++    xen_argo_addr_t local_addr;
++    uint8_t buf[CHR_READ_BUF_LEN];
++    int fd;
++    int bufcnt;
++    int bufptr;
++    int max_size;
++    int connected;
++    bool stream;
++} ArgoChardev;
++
++#define TYPE_CHARDEV_ARGO "chardev-argo"
++#define ARGO_CHARDEV(obj)                                     \
++    OBJECT_CHECK(ArgoChardev, (obj), TYPE_CHARDEV_ARGO)
++
++
++static int argo_chr_write(Chardev *chr, const uint8_t *buf, int len)
++{
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++    int write_len = len;
++    int ret;
++
++ again:
++    if (s->stream) {
++        ret = argo_send(s->fd, buf, write_len, 0);
++    } else {
++        ret = argo_sendto(s->fd, buf, write_len, 0, &s->remote_addr);
++    }
++
++    if (ret == -1 && errno == EMSGSIZE) {
++        /*
++         * try again with a smaller chunk, but avoid 0 since argo_send returns
++         * 0 for that case and we'll end up looping.  Instead return -1 since
++         * we haven't made progress and the message will get dropped.
++         */
++        write_len /= 2;
++        if (write_len) {
++            goto again;
++        }
++    }
++
++    if (ret == -1) {
++        fprintf(stderr, "%s error: argo_sendto() errno=%d (%s) len=%d write_len=%d.\n",
++                ARGO_CHARDRV_NAME, errno, strerror(errno), len, write_len);
++    }
++
++    return ret;
++}
++
++static int argo_chr_read_poll(void *opaque)
++{
++    Chardev *chr = CHARDEV(opaque);
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++
++    s->max_size = qemu_chr_be_can_write(chr);
++
++    /* If there were any stray characters in the queue process them
++     * first
++     */
++    while (s->max_size > 0 && s->bufptr < s->bufcnt) {
++        qemu_chr_be_write(chr, &s->buf[s->bufptr], 1);
++        s->bufptr++;
++        s->max_size = qemu_chr_be_can_write(chr);
++    }
++    return s->max_size;
++}
++
++static gboolean argo_chr_read(QIOChannel *chan, GIOCondition cond, void *opaque);
++
++static void argo_chr_update_read_handler(Chardev *chr)
++{
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++
++    remove_fd_in_watch(chr);
++    if (s->ioc) {
++        chr->gsource = io_add_watch_poll(chr, s->ioc,
++                                         argo_chr_read_poll,
++                                         argo_chr_read, chr,
++                                         chr->gcontext);
++    }
++}
++
++static gboolean argo_chr_read(QIOChannel *chan, GIOCondition cond, void *opaque)
++{
++    Chardev *chr = CHARDEV(opaque);
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++    int ret;
++
++    if (s->max_size == 0)
++        return FALSE;
++
++    ret = argo_recvfrom(s->fd, s->buf, sizeof(s->buf), 0, &s->remote_addr);
++    if (ret < 0) {
++        fprintf(stderr, "%s error: argo_recvfrom() failed (%s) - %d.\n",
++                ARGO_CHARDRV_NAME, strerror(errno), ret);
++        return FALSE;
++    }
++
++    if (!s->stream) {
++        if (s->connected == 0 && !strncmp((char*)(s->buf), ARGO_MAGIC_CONNECT, 4)) {
++            fprintf(stderr, "argo_recvfrom() returned ARGO_MAGIC_CONNECT, connecting.\n");
++            argo_chr_update_read_handler(chr);
++            qemu_chr_be_event(chr, CHR_EVENT_OPENED);
++            if (!chr->gsource) {
++                chr->gsource = io_add_watch_poll(chr, s->ioc,
++                                                 argo_chr_read_poll,
++                                                 argo_chr_read, chr, chr->gcontext);
++            }
++            s->connected = 1;
++            return FALSE;
++        }
++        if (s->connected == 1 && !strncmp((char*)(s->buf), ARGO_MAGIC_DISCONNECT, 4)) {
++            argo_chr_update_read_handler(chr);
++            qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
++            if (!chr->gsource) {
++                chr->gsource = io_add_watch_poll(chr, s->ioc,
++                                                 argo_chr_read_poll,
++                                                 argo_chr_read, chr, chr->gcontext);
++            }
++            fprintf(stderr, "argo_recvfrom() returned ARGO_MAGIC_DISCONNECT, closing.\n");
++            s->connected = 0;
++            return FALSE;
++        }
++    }
++
++    s->bufcnt = ret;
++    s->bufptr = 0;
++    while (s->max_size > 0 && s->bufptr < s->bufcnt) {
++        qemu_chr_be_write(chr, &s->buf[s->bufptr], 1);
++        s->bufptr++;
++        s->max_size = qemu_chr_be_can_write(chr);
++    }
++
++    return TRUE;
++}
++
++static GSource *argo_chr_add_watch(Chardev *chr, GIOCondition cond)
++{
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++    return qio_channel_create_watch(s->ioc, cond);
++}
++
++static void char_argo_finalize(Object *obj)
++{
++    Chardev *chr = CHARDEV(obj);
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++
++    remove_fd_in_watch(chr);
++    if (s->ioc) {
++        object_unref(OBJECT(s->ioc));
++    }
++
++    s->fd = -1;
++
++    qemu_chr_be_event(chr, CHR_EVENT_CLOSED);
++}
++
++static void qemu_chr_parse_argo(QemuOpts *opts, ChardevBackend *backend,
++                               Error **errp)
++{
++    uint64_t domid = qemu_opt_get_number(opts, "domid", 0);
++    /* Sigh, port is defined as a string */
++    const char *port_str = qemu_opt_get(opts, "port");
++    const char *localport_str = qemu_opt_get(opts, "localport");
++    bool stream = qemu_opt_get_bool(opts, "stream", false);
++    uint32_t port, localport;
++    ChardevArgo *argo;
++
++    port = port_str ? strtoul(port_str, NULL, 0) : ARGO_QH_PORT;
++    localport = localport_str ? strtoul(localport_str, NULL, 0) : 0;
++
++    backend->type = CHARDEV_BACKEND_KIND_ARGO;
++    if (domid >= DOMID_FIRST_RESERVED) {
++        error_setg(errp, "chardev: argo: domid invalid");
++        return;
++    }
++    if (port > 0xffff) {
++        error_setg(errp, "chardev: argo: port %u out of range", port);
++        return;
++    }
++    if (localport == 0) {
++        localport = port + 10000;
++    }
++    if (localport > 0xffff) {
++        error_setg(errp,
++                   "chardev: argo: localport %u out of range", localport);
++        return;
++    }
++
++    argo = backend->u.argo.data = g_new0(ChardevArgo, 1);
++    qemu_chr_parse_common(opts, qapi_ChardevArgo_base(argo));
++
++    argo->domid     = domid;
++    argo->port      = port;
++    argo->localport = localport;
++    argo->stream    = stream;
++}
++
++static void qmp_chr_open_argo(Chardev *chr,
++                             ChardevBackend *backend,
++                             bool *be_opened,
++                             Error **errp)
++{
++    ArgoChardev *s = ARGO_CHARDEV(chr);
++    ChardevArgo *argo = backend->u.argo.data;
++    uint32_t argo_ring_size = ARGO_CHARDRV_RING_SIZE;
++    int fd = -1;
++
++    s->local_addr.aport = argo->localport;
++    s->local_addr.domain_id = XEN_ARGO_DOMID_ANY;
++    s->remote_addr.aport = argo->port;
++    s->remote_addr.domain_id = argo->domid;
++    s->stream = argo->stream;
++
++    fd = argo_socket(s->stream ? SOCK_STREAM : SOCK_DGRAM);
++    if (fd < 0) {
++        error_setg(errp, "%s cannot create argo socket - err: %d",
++                   ARGO_CHARDRV_NAME, fd);
++        return;
++    }
++
++    if (ioctl(fd, ARGOIOCSETRINGSIZE, &argo_ring_size)) {
++        error_setg(errp,
++                   "%s failed to set ring size argo socket - err: %d",
++                   ARGO_CHARDRV_NAME, errno);
++        close(fd);
++        return;
++    }
++
++    if (argo_bind(fd, &s->local_addr, 0)) {
++        error_setg(errp,
++                   "%s failed to bind argo socket - err: %d",
++                   ARGO_CHARDRV_NAME, errno);
++        close(fd);
++        return;
++    }
++
++    if (s->stream) {
++        if (argo_connect(fd, &s->remote_addr)) {
++            error_setg(errp,
++                       "%s failed to connect argo socket - err: %d",
++                       ARGO_CHARDRV_NAME, errno);
++            close(fd);
++            return;
++        }
++    }
++
++
++    s->fd = fd;
++    s->bufcnt = 0;
++    s->bufptr = 0;
++    /* be isn't opened until we get a connection */
++    *be_opened = false;
++
++    s->ioc = QIO_CHANNEL(qio_channel_file_new_fd(fd));
++
++    /* TODO currently starting up open */
++    s->connected = 1;
++
++    fprintf(stderr, "Opened Argo chardev\n");
++}
++
++static void char_argo_class_init(ObjectClass *oc, void *data)
++{
++    ChardevClass *cc = CHARDEV_CLASS(oc);
++
++    cc->parse = qemu_chr_parse_argo;
++    cc->open = qmp_chr_open_argo;
++    cc->chr_write = argo_chr_write;
++    cc->chr_add_watch = argo_chr_add_watch;
++    cc->chr_update_read_handler = argo_chr_update_read_handler;
++}
++
++static const TypeInfo char_argo_type_info = {
++    .name = TYPE_CHARDEV_ARGO,
++    .parent = TYPE_CHARDEV,
++    .instance_size = sizeof(ArgoChardev),
++    .instance_finalize = char_argo_finalize,
++    .class_init = char_argo_class_init,
++};
++
++static void register_types(void)
++{
++    type_register_static(&char_argo_type_info);
++}
++
++type_init(register_types);
+--- a/chardev/char.c
++++ b/chardev/char.c
+@@ -366,6 +366,7 @@ QemuOpts *qemu_chr_parse_compat(const ch
+         strcmp(filename, "msmouse") == 0 ||
+         strcmp(filename, "wctablet") == 0 ||
+         strcmp(filename, "braille") == 0 ||
++        strcmp(filename, "argo")     == 0 ||
+         strcmp(filename, "testdev") == 0 ||
+         strcmp(filename, "stdio")   == 0) {
+         qemu_opt_set(opts, "backend", filename, &error_abort);
+@@ -855,6 +856,9 @@ QemuOptsList qemu_chardev_opts = {
+             .name = "reconnect",
+             .type = QEMU_OPT_NUMBER,
+         },{
++            .name = "stream",
++            .type = QEMU_OPT_BOOL,
++        },{
+             .name = "telnet",
+             .type = QEMU_OPT_BOOL,
+         },{
+--- a/include/chardev/char.h
++++ b/include/chardev/char.h
+@@ -235,6 +235,7 @@ int qemu_chr_wait_connected(Chardev *chr
+ #define TYPE_CHARDEV_SERIAL "chardev-serial"
+ #define TYPE_CHARDEV_SOCKET "chardev-socket"
+ #define TYPE_CHARDEV_UDP "chardev-udp"
++#define TYPE_CHARDEV_ARGO "chardev-argo"
+ 
+ #define CHARDEV_IS_RINGBUF(chr) \
+     object_dynamic_cast(OBJECT(chr), TYPE_CHARDEV_RINGBUF)
+--- a/qapi/char.json
++++ b/qapi/char.json
+@@ -286,6 +286,24 @@
+   'base': 'ChardevCommon' }
+ 
+ ##
++# @ChardevArgo:
++#
++# Configuration info for argo socket chardevs.
++#
++# @domid: remote domain id (defaults to 0 dom0)
++# @port: remote port (defaults to 5100 QMP helper)
++# @localport: local port (defaults to port + 10000)
++# @stream: Use Argo SOCK_STREAM (defaults to false, SOCK_DGRAM)
++#
++# Since: Not upstream
++##
++{ 'struct': 'ChardevArgo', 'data': { '*domid'    : 'int',
++                                  '*port'       : 'int',
++                                  '*localport'  : 'int',
++                                  '*stream'     : 'bool' },
++  'base': 'ChardevCommon' }
++
++##
+ # @ChardevMux:
+ #
+ # Configuration info for mux chardevs.
+@@ -395,6 +413,7 @@
+                                        'spiceport': 'ChardevSpicePort',
+ # TODO: { 'type': 'ChardevSpicePort', 'if': 'defined(CONFIG_SPICE)' },
+                                        'vc'     : 'ChardevVC',
++                                       'argo'    : 'ChardevArgo',
+                                        'ringbuf': 'ChardevRingbuf',
+                                        # next one is just for compatibility
+                                        'memory' : 'ChardevRingbuf' } }
+--- a/qemu-options.hx
++++ b/qemu-options.hx
+@@ -2458,6 +2458,10 @@ DEF("chardev", HAS_ARG, QEMU_OPTION_char
+     "-chardev parallel,id=id,path=path[,mux=on|off][,logfile=PATH][,logappend=on|off]\n"
+     "-chardev parport,id=id,path=path[,mux=on|off][,logfile=PATH][,logappend=on|off]\n"
+ #endif
++#if defined(CONFIG_XEN)
++    "-chardev argo,id=id[,port=5100][,domid=0][,localport=15100][,stream=on|off]\n"
++    "         [,logfile=PATH][,logappend=on|off]\n"
++#endif
+ #if defined(CONFIG_SPICE)
+     "-chardev spicevmc,id=id,name=name[,debug=debug][,logfile=PATH][,logappend=on|off]\n"
+     "-chardev spiceport,id=id,name=name[,debug=debug][,logfile=PATH][,logappend=on|off]\n"

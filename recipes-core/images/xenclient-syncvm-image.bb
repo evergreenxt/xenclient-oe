@@ -23,9 +23,9 @@ IMAGE_INSTALL = "\
     packagegroup-base \
     packagegroup-xenclient-common \
     kernel-modules \
-    v4v-module \
-    libv4v \
-    libv4v-bin \
+    argo-module \
+    libargo \
+    libargo-bin \
     rsyslog \
     openssh \
     wget \
@@ -47,15 +47,8 @@ post_rootfs_shell_commands() {
     # Change root shell.
     sed -i 's|root:x:0:0:root:/root:/bin/sh|root:x:0:0:root:/root:/bin/bash|' ${IMAGE_ROOTFS}/etc/passwd;
 
-    # Trick to resolve dom0 name with V4V.
+    # Trick to resolve dom0 name with argo.
     echo '1.0.0.0 dom0' >> ${IMAGE_ROOTFS}/etc/hosts;
-
-    # TODO: This can be handled through populate-volatiles.sh
-    # Create read-only rootfs required links.
-    rm -f ${IMAGE_ROOTFS}/etc/resolv.conf;
-    ln -s /var/volatile/etc/resolv.conf ${IMAGE_ROOTFS}/etc/resolv.conf;
-    rm -f ${IMAGE_ROOTFS}/etc/network/interfaces;
-    ln -s /var/volatile/etc/network/interfaces ${IMAGE_ROOTFS}/etc/network/interfaces;
 }
 ROOTFS_POSTPROCESS_COMMAND += "post_rootfs_shell_commands; "
 

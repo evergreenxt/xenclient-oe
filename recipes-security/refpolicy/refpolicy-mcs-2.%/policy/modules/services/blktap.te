@@ -106,7 +106,7 @@ xc_search_storage(tapdisk_t)
 xc_config_dir_search(tapdisk_t)
 xc_search_vhd_key_dirs(tapdisk_t)
 xc_read_vhd_key_files(tapdisk_t)
-xc_dontaudit_rw_v4v_chr(tapdisk_t)
+xc_dontaudit_rw_argo_chr(tapdisk_t)
 xc_read_sync_client_config_files(tapdisk_t)
 xc_getattr_sync_client_config_files(tapdisk_t)
 xc_read_all_disks(tapdisk_t)
@@ -123,6 +123,13 @@ logging_send_syslog_msg(tapdisk_t)
 init_dontaudit_use_fds(tapdisk_t)
 
 fs_getattr_xattr_fs(tapdisk_t)
+
+# cgroups
+userdom_dontaudit_search_user_home_dirs(tapdisk_t)
+files_dontaudit_search_var_lib(tapdisk_t)
+fs_getattr_tmpfs(tapdisk_t)
+fs_search_cgroup_dirs(tapdisk_t)
+fs_rw_cgroup_files(tapdisk_t)
 
 optional_policy(`
 	updatemgr_dontaudit_use_fd(tapdisk_t)
@@ -168,7 +175,7 @@ tapdisk_rw_control_dir(tapctl_t)
 tapdisk_stream_connect(tapctl_t)
 userdom_use_user_ptys(tapctl_t)
 xc_read_etc_files(tapctl_t)
-xc_dontaudit_rw_v4v_chr(tapctl_t)
+xc_dontaudit_rw_argo_chr(tapctl_t)
 xen_write_tmp(tapctl_t)
 xen_dontaudit_rw_unix_stream_sockets(tapctl_t)
 
