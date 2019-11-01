@@ -33,11 +33,7 @@ PATCHES
 ################################################################################
 --- /dev/null
 +++ b/xen/include/public/txt.h
-<<<<<<< HEAD
-@@ -0,0 +1,64 @@
-=======
 @@ -0,0 +1,67 @@
->>>>>>> upstream/stable-9
 +/******************************************************************************
 + * txt.h
 + *
@@ -107,11 +103,7 @@ PATCHES
 + */
 --- a/xen/arch/x86/hvm/hypercall.c
 +++ b/xen/arch/x86/hvm/hypercall.c
-<<<<<<< HEAD
-@@ -133,6 +133,7 @@ static const hypercall_table_t hvm_hyper
-=======
 @@ -139,6 +139,9 @@ static const hypercall_table_t hvm_hyper
->>>>>>> upstream/stable-9
      COMPAT_CALL(mmuext_op),
      HYPERCALL(xenpmu_op),
      COMPAT_CALL(dm_op),
@@ -123,11 +115,7 @@ PATCHES
  
 --- a/xen/arch/x86/hypercall.c
 +++ b/xen/arch/x86/hypercall.c
-<<<<<<< HEAD
-@@ -68,6 +68,7 @@ const hypercall_args_t hypercall_args_ta
-=======
 @@ -68,6 +68,9 @@ const hypercall_args_t hypercall_args_ta
->>>>>>> upstream/stable-9
      ARGS(v4v_op, 6),
      ARGS(xenpmu_op, 2),
      ARGS(dm_op, 3),
@@ -139,11 +127,7 @@ PATCHES
  };
 --- a/xen/arch/x86/pv/hypercall.c
 +++ b/xen/arch/x86/pv/hypercall.c
-<<<<<<< HEAD
-@@ -80,6 +80,7 @@ static const hypercall_table_t pv_hyperc
-=======
 @@ -81,6 +81,9 @@ const hypercall_table_t pv_hypercall_tab
->>>>>>> upstream/stable-9
      HYPERCALL(v4v_op),
      HYPERCALL(xenpmu_op),
      COMPAT_CALL(dm_op),
@@ -263,11 +247,7 @@ PATCHES
   * mode: C
 --- a/xen/include/asm-x86/tboot.h
 +++ b/xen/include/asm-x86/tboot.h
-<<<<<<< HEAD
-@@ -102,6 +102,9 @@ typedef struct __packed {
-=======
 @@ -102,6 +102,15 @@ typedef struct __packed {
->>>>>>> upstream/stable-9
      uint32_t  flags;
      uint64_t  ap_wake_addr;      /* phys addr of kernel/VMM SIPI vector */
      uint32_t  ap_wake_trigger;   /* kernel/VMM writes APIC ID to wake AP */
@@ -295,11 +275,7 @@ PATCHES
  #define __HYPERVISOR_arch_0               48
 --- a/xen/include/xen/hypercall.h
 +++ b/xen/include/xen/hypercall.h
-<<<<<<< HEAD
-@@ -148,6 +148,9 @@ do_dm_op(
-=======
 @@ -148,6 +148,11 @@ do_dm_op(
->>>>>>> upstream/stable-9
      unsigned int nr_bufs,
      XEN_GUEST_HANDLE_PARAM(xen_dm_op_buf_t) bufs);
 

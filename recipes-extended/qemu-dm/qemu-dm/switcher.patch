@@ -114,13 +114,8 @@ PATCHES
  # ui-sdl module
  common-obj-$(CONFIG_SDL) += sdl.mo
 --- /dev/null
-<<<<<<< HEAD:recipes-openxt/qemu-dm/qemu-dm-2.6.2/switcher.patch
-+++ qemu-2.6.2/ui/xen-input.c
-@@ -0,0 +1,598 @@
-=======
 +++ b/ui/xen-input.c
 @@ -0,0 +1,429 @@
->>>>>>> upstream/stable-9:recipes-extended/qemu-dm/qemu-dm/switcher.patch
 +/*
 + * Copyright (c) 2012 Citrix Systems, Inc.
 + *

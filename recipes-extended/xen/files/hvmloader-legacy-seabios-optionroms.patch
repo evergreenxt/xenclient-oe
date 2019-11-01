@@ -35,11 +35,7 @@ PATCHES
 ################################################################################
 --- a/tools/firmware/Makefile
 +++ b/tools/firmware/Makefile
-<<<<<<< HEAD
-@@ -7,7 +7,7 @@ INST_DIR := $(DESTDIR)$(XENFIRMWAREDIR)
-=======
 @@ -12,7 +12,7 @@ DEBG_DIR := $(DESTDIR)$(DEBUG_DIR)$(XENF
->>>>>>> upstream/stable-9
  
  SUBDIRS-y :=
  SUBDIRS-$(CONFIG_OVMF) += ovmf-dir
@@ -90,13 +86,8 @@ PATCHES
  smbios.o: CFLAGS += -D__SMBIOS_DATE__="\"$(SMBIOS_REL_DATE)\""
  
  ACPI_PATH = ../../libacpi
-<<<<<<< HEAD
---- a/tools/firmware/hvmloader/mkhex
-+++ b/tools/firmware/hvmloader/mkhex
-=======
 --- a/tools/misc/mkhex
 +++ b/tools/misc/mkhex
->>>>>>> upstream/stable-9
 @@ -19,7 +19,7 @@
  # this program; If not, see <http://www.gnu.org/licenses/>.
  #

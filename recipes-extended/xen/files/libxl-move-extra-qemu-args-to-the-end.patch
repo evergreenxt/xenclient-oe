@@ -39,11 +39,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -629,8 +629,6 @@ static int libxl__build_device_model_arg
-=======
 @@ -648,8 +648,6 @@ static int libxl__build_device_model_arg
->>>>>>> upstream/stable-9
      if (state->saved_state) {
          flexarray_vappend(dm_args, "-loadvm", state->saved_state, NULL);
      }
@@ -61,11 +57,7 @@ PATCHES
      flexarray_append(dm_args, NULL);
      *args = (char **) flexarray_contents(dm_args);
      flexarray_append(dm_envs, NULL);
-<<<<<<< HEAD
-@@ -1383,8 +1383,6 @@ static int libxl__build_device_model_arg
-=======
 @@ -1424,8 +1424,6 @@ static int libxl__build_device_model_arg
->>>>>>> upstream/stable-9
          flexarray_append(dm_args, "-incoming");
          flexarray_append(dm_args, GCSPRINTF("fd:%d",*dm_state_fd));
      }
@@ -74,11 +66,7 @@ PATCHES
  
      flexarray_append(dm_args, "-machine");
      switch (b_info->type) {
-<<<<<<< HEAD
-@@ -1644,6 +1642,8 @@ end_search:
-=======
 @@ -1728,6 +1726,8 @@ end_search:
->>>>>>> upstream/stable-9
              flexarray_append(dm_args, user);
          }
      }

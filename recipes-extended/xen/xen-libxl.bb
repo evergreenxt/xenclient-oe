@@ -111,11 +111,8 @@ do_configure_prepend() {
 	#remove optimizations in the config files
 	sed -i 's/-O2//g' ${S}/Config.mk
 	sed -i 's/-O2//g' ${S}/config/StdGNU.mk
-<<<<<<< HEAD
-=======
 
 	cp "${WORKDIR}/defconfig" "${B}/xen/.config"
->>>>>>> upstream/stable-9
 }
 
 do_compile() {

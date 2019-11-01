@@ -10,12 +10,6 @@ SRC_URI = "git://${OPENXT_GIT_MIRROR}/xctools.git;protocol=${OPENXT_GIT_PROTOCOL
 	   file://xcpmd.initscript \
 "
 
-<<<<<<< HEAD
-EXTRA_OECONF += "--with-idldir=${STAGING_IDLDIR}"
-EXTRA_OECONF += "--with-rpcgen-templates=${STAGING_DATADIR_NATIVE}/xc-rpcgen-1.0/templates"
-
-=======
->>>>>>> upstream/stable-8
 CFLAGS_prepend += " -I${STAGING_INCDIR}/libnl3 "
 
 CFLAGS_append += " -Wno-unused-parameter -Wno-deprecated-declarations "

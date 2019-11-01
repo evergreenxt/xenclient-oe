@@ -21,11 +21,7 @@ Mahantesh Salimath<salimathm@ainfosec.com>
 ################################################################################
 --- a/tools/libxl/libxl_create.c
 +++ b/tools/libxl/libxl_create.c
-<<<<<<< HEAD
-@@ -1265,7 +1265,7 @@ static void domcreate_rebuild_done(libxl
-=======
 @@ -1315,7 +1315,7 @@ static void domcreate_rebuild_done(libxl
->>>>>>> upstream/stable-9
  
      /* convenience aliases */
      const uint32_t domid = dcs->guest_domid;

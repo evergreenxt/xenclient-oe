@@ -88,11 +88,7 @@ PATCHES
      case V4VOP_register_ring:
 --- a/xen/include/xsm/dummy.h
 +++ b/xen/include/xsm/dummy.h
-<<<<<<< HEAD
-@@ -717,9 +717,16 @@ static XSM_INLINE int xsm_dm_op(XSM_DEFA
-=======
 @@ -721,9 +721,16 @@ static XSM_INLINE int xsm_dm_op(XSM_DEFA
->>>>>>> upstream/stable-9
      return xsm_default_action(action, current->domain, d);
  }
  
@@ -113,12 +109,7 @@ PATCHES
  #endif /* CONFIG_X86 */
 --- a/xen/include/xsm/xsm.h
 +++ b/xen/include/xsm/xsm.h
-<<<<<<< HEAD
-@@ -184,6 +184,7 @@ struct xsm_operations {
- #endif
-=======
 @@ -183,6 +183,7 @@ struct xsm_operations {
->>>>>>> upstream/stable-9
      int (*xen_version) (uint32_t cmd);
      int (*domain_resource_map) (struct domain *d);
      int (*v4v_send) (struct domain *dom1, struct domain *dom2);
@@ -146,12 +137,7 @@ PATCHES
  static inline int xsm_xen_version (xsm_default_t def, uint32_t op)
 --- a/xen/xsm/dummy.c
 +++ b/xen/xsm/dummy.c
-<<<<<<< HEAD
-@@ -161,4 +161,5 @@ void __init xsm_fixup_ops (struct xsm_op
-     set_to_dummy_if_null(ops, memory_translate);
-=======
 @@ -160,4 +160,5 @@ void __init xsm_fixup_ops (struct xsm_op
->>>>>>> upstream/stable-9
      set_to_dummy_if_null(ops, xen_version);
      set_to_dummy_if_null(ops, domain_resource_map);
      set_to_dummy_if_null(ops, v4v_send);
@@ -159,11 +145,7 @@ PATCHES
  }
 --- a/xen/xsm/flask/hooks.c
 +++ b/xen/xsm/flask/hooks.c
-<<<<<<< HEAD
-@@ -1682,6 +1682,11 @@ static int flask_v4v_send(struct domain
-=======
 @@ -1724,6 +1724,11 @@ static int flask_v4v_send(struct domain
->>>>>>> upstream/stable-9
      return domain_has_perm(dom1, dom2, SECCLASS_V4V, V4V__SEND);
  }
  
@@ -185,11 +167,7 @@ PATCHES
  void __init flask_init(const void *policy_buffer, size_t policy_size)
 --- a/xen/xsm/flask/policy/access_vectors
 +++ b/xen/xsm/flask/policy/access_vectors
-<<<<<<< HEAD
-@@ -521,4 +521,5 @@ class version
-=======
 @@ -537,4 +537,5 @@ class version
->>>>>>> upstream/stable-9
  class v4v
  {
      send

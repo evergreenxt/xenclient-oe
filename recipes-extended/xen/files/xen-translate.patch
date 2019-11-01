@@ -125,11 +125,7 @@ PATCHES
  {
 --- a/xen/common/memory.c
 +++ b/xen/common/memory.c
-<<<<<<< HEAD
-@@ -433,6 +433,162 @@ static bool propagate_node(unsigned int
-=======
 @@ -497,6 +497,162 @@ static bool propagate_node(unsigned int
->>>>>>> upstream/stable-9
      return true;
  }
  
@@ -292,11 +288,7 @@ PATCHES
  static long memory_exchange(XEN_GUEST_HANDLE_PARAM(xen_memory_exchange_t) arg)
  {
      struct xen_memory_exchange exch;
-<<<<<<< HEAD
-@@ -956,6 +1112,7 @@ long do_memory_op(unsigned long cmd, XEN
-=======
 @@ -1081,6 +1237,7 @@ long do_memory_op(unsigned long cmd, XEN
->>>>>>> upstream/stable-9
      struct memop_args args;
      domid_t domid;
      unsigned long start_extent = cmd >> MEMOP_EXTENT_SHIFT;
@@ -304,15 +296,9 @@ PATCHES
      int op = cmd & MEMOP_CMD_MASK;
  
      switch ( op )
-<<<<<<< HEAD
-@@ -1386,6 +1543,27 @@ long do_memory_op(unsigned long cmd, XEN
-     }
- #endif
-=======
 @@ -1533,6 +1690,27 @@ long do_memory_op(unsigned long cmd, XEN
              guest_handle_cast(arg, xen_mem_acquire_resource_t));
          break;
->>>>>>> upstream/stable-9
  
 +    case XENMEM_translate_gpfn_list:
 +        progress = cmd >> MEMOP_EXTENT_SHIFT;
@@ -338,25 +324,6 @@ PATCHES
      default:
          rc = arch_memory_op(cmd, arg);
          break;
-<<<<<<< HEAD
---- a/xen/include/asm-x86/mm.h
-+++ b/xen/include/asm-x86/mm.h
-@@ -240,9 +240,12 @@ struct page_info
- #define PGC_state_offlined PG_mask(2, 9)
- #define PGC_state_free    PG_mask(3, 9)
- #define page_state_is(pg, st) (((pg)->count_info&PGC_state) == PGC_state_##st)
-+ /* Pinned by dom0 tools */
-+#define _PGC_pinned_by_tools	PG_shift(10)
-+#define PGC_pinned_by_tools	PG_mask(1, 10)
- 
-  /* Count of references to this frame. */
--#define PGC_count_width   PG_shift(9)
-+#define PGC_count_width   PG_shift(10)
- #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
- 
- struct spage_info
-=======
->>>>>>> upstream/stable-9
 --- a/xen/include/public/memory.h
 +++ b/xen/include/public/memory.h
 @@ -312,8 +312,30 @@ struct xen_remove_from_physmap {

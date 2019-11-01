@@ -54,11 +54,7 @@ PATCHES
      cpuid(base + 2, &eax, &ebx, &ecx, &edx);
 --- a/xen/arch/x86/hvm/hvm.c
 +++ b/xen/arch/x86/hvm/hvm.c
-<<<<<<< HEAD
-@@ -4164,6 +4164,10 @@ static int hvmop_set_param(
-=======
 @@ -4180,6 +4180,10 @@ static int hvmop_set_param(
->>>>>>> upstream/stable-9
               !(a.value & HVMPV_base_freq) )
              rc = -EINVAL;
          break;
@@ -71,11 +67,7 @@ PATCHES
           * Only actually required for VT-x lacking unrestricted_guest
 --- a/xen/arch/x86/traps.c
 +++ b/xen/arch/x86/traps.c
-<<<<<<< HEAD
-@@ -936,10 +936,18 @@ void cpuid_hypervisor_leaves(const struc
-=======
 @@ -865,10 +865,18 @@ void cpuid_hypervisor_leaves(const struc
->>>>>>> upstream/stable-9
      switch ( idx )
      {
      case 0:
@@ -114,15 +106,9 @@ PATCHES
   * EAX: Largest Xen-information leaf. All leaves up to an including @EAX
 --- a/xen/include/public/hvm/params.h
 +++ b/xen/include/public/hvm/params.h
-<<<<<<< HEAD
-@@ -274,6 +274,11 @@
-  */
- #define HVM_PARAM_VM86_TSS_SIZED 37
-=======
 @@ -279,6 +279,10 @@
  #define XEN_HVM_MCA_CAP_LMCE   (xen_mk_ullong(1) << 0)
  #define XEN_HVM_MCA_CAP_MASK   XEN_HVM_MCA_CAP_LMCE
->>>>>>> upstream/stable-9
  
 -#define HVM_NR_PARAMS 39
 +/* XenClient specific hvm params */

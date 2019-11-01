@@ -1,10 +1,6 @@
 --- a/tools/libxl/libxl_blktap3.c
 +++ b/tools/libxl/libxl_blktap3.c
-<<<<<<< HEAD
-@@ -105,7 +105,33 @@ char *libxl__blktap_devpath(libxl__gc *g
-=======
 @@ -105,12 +105,44 @@ char *libxl__blktap_devpath(libxl__gc *g
->>>>>>> upstream/stable-9
      return NULL;
  }
  

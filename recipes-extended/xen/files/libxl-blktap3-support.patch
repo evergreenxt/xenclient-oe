@@ -169,59 +169,9 @@ PATCHES
 + * indent-tabs-mode: nil
 + * End:
 + */
-<<<<<<< HEAD
---- a/tools/libxl/Makefile
-+++ b/tools/libxl/Makefile
-@@ -20,17 +20,17 @@ LIBUUID_LIBS += -luuid
- endif
- 
- LIBXL_LIBS =
--LIBXL_LIBS = $(LDLIBS_libxentoollog) $(LDLIBS_libxenevtchn) $(LDLIBS_libxenctrl) $(LDLIBS_libxenguest) $(LDLIBS_libxenstore) $(LDLIBS_libblktapctl) $(PTYFUNCS_LIBS) $(LIBUUID_LIBS)
-+LIBXL_LIBS = $(LDLIBS_libxentoollog) $(LDLIBS_libxenevtchn) $(LDLIBS_libxenctrl) $(LDLIBS_libxenguest) $(LDLIBS_libxenstore) $(PTYFUNCS_LIBS) $(LIBUUID_LIBS)
- ifeq ($(CONFIG_LIBNL),y)
- LIBXL_LIBS += $(LIBNL3_LIBS)
- endif
- 
-+CFLAGS_LIBXL += -I/usr/include/blktap
- CFLAGS_LIBXL += $(CFLAGS_libxentoollog)
- CFLAGS_LIBXL += $(CFLAGS_libxenevtchn)
- CFLAGS_LIBXL += $(CFLAGS_libxenctrl)
- CFLAGS_LIBXL += $(CFLAGS_libxenguest)
- CFLAGS_LIBXL += $(CFLAGS_libxenstore)
--CFLAGS_LIBXL += $(CFLAGS_libblktapctl) 
- ifeq ($(CONFIG_LIBNL),y)
- CFLAGS_LIBXL += $(LIBNL3_CFLAGS)
- endif
-@@ -47,9 +47,9 @@ LIBXLU_LIBS = $(LDLIBS_libxenlight)
- 
- LIBXL_OBJS-y = osdeps.o libxl_paths.o libxl_bootloader.o flexarray.o
- ifeq ($(LIBXL_BLKTAP),y)
--LIBXL_OBJS-y += libxl_blktap2.o
-+LIBXL_OBJS-y += libxl_blktap3.o
- else
--LIBXL_OBJS-y += libxl_noblktap2.o
-+LIBXL_OBJS-y += libxl_noblktap3.o
- endif
- 
- ifeq ($(CONFIG_LIBNL),y)
---- a/tools/libxl/libxl_types_internal.idl
-+++ b/tools/libxl/libxl_types_internal.idl
-@@ -27,6 +27,7 @@ libxl__device_kind = Enumeration("device
-     (10, "QUSB"),
-     (11, "9PFS"),
-     (12, "VWIF"),
-+    (13, "VBD3"),
-     ])
- 
- libxl__console_backend = Enumeration("console_backend", [
---- a/tools/libxl/libxl_device.c
-+++ b/tools/libxl/libxl_device.c
-@@ -936,7 +936,9 @@ void libxl__initiate_device_generic_remo
-=======
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
 @@ -973,7 +973,9 @@ void libxl__initiate_device_generic_remo
->>>>>>> upstream/stable-9
      STATE_AO_GC(aodev->ao);
      xs_transaction_t t = 0;
      char *be_path = libxl__device_backend_path(gc, aodev->dev);
@@ -231,11 +181,7 @@ PATCHES
      char *online_path = GCSPRINTF("%s/online", be_path);
      const char *state;
      libxl_dominfo info;
-<<<<<<< HEAD
-@@ -1006,6 +1008,11 @@ void libxl__initiate_device_generic_remo
-=======
 @@ -1050,6 +1052,11 @@ void libxl__initiate_device_generic_remo
->>>>>>> upstream/stable-9
                  LOGD(ERROR, domid, "unable to write to xenstore path %s", state_path);
                  goto out;
              }

@@ -1139,11 +1139,7 @@ PATCHES
 +#endif /* __USBIF__BACKEND__COMMON_H__ */
 --- /dev/null
 +++ b/drivers/usb/xen-usbback/interface.c
-<<<<<<< HEAD
-@@ -0,0 +1,164 @@
-=======
 @@ -0,0 +1,165 @@
->>>>>>> upstream/stable-9
 +/******************************************************************************
 + *
 + * usb device interface management.

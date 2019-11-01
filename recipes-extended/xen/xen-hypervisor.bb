@@ -67,15 +67,12 @@ EXTRA_OEMAKE += " \
 
 do_configure() {
     cp "${WORKDIR}/defconfig" "${B}/xen/.config"
-<<<<<<< HEAD
-=======
     #Define CONFIG_TXT_OP in the hypervisor build to export tboot evtlog data
     #It's stubbed out for the pv-shim since it's not supported, but uses the
     #same hypercall headers
     echo "CONFIG_TXT_OP=y" >> "${B}/xen/.config"
 
     # do configure
->>>>>>> upstream/stable-9
     oe_runconf
 }
 

@@ -32,9 +32,6 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -1570,7 +1570,10 @@ static int libxl__build_device_model_arg
-=======
 @@ -1503,7 +1503,7 @@ static int libxl__build_device_model_arg
              } else if ((disks[i].is_cdrom) && (b_info->stubdomain_version ==
                                                 LIBXL_STUBDOMAIN_VERSION_LINUX))
@@ -60,7 +57,6 @@ PATCHES
                          GCSPRINTF("file=%s,if=none,id=ahcidisk-%d,format=%s,cache=writeback",
                          target_path, disk, format),
 @@ -1605,8 +1613,10 @@ static int libxl__build_device_model_arg
->>>>>>> upstream/stable-9
                          return ERROR_INVAL;
                      }
                      if (b_info->stubdomain_version == LIBXL_STUBDOMAIN_VERSION_LINUX) {

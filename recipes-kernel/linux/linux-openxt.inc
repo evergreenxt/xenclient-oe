@@ -1,8 +1,5 @@
 require recipes-kernel/linux/linux-openxt-copy-objtool.inc
-<<<<<<< HEAD
-=======
 require classes/kernel-module-signing.bbclass
->>>>>>> upstream/stable-9
 
 DEPENDS += "bc-native"
 

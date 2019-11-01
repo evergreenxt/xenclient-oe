@@ -30,11 +30,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
-<<<<<<< HEAD
-@@ -752,6 +752,10 @@ int libxl__device_destroy(libxl__gc *gc,
-=======
 @@ -788,6 +788,10 @@ int libxl__device_destroy(libxl__gc *gc,
->>>>>>> upstream/stable-9
              libxl__xs_path_cleanup(gc, t, be_path);
          }
  
@@ -45,11 +41,7 @@ PATCHES
          rc = libxl__xs_transaction_commit(gc, &t);
          if (!rc) break;
          if (rc < 0) goto out;
-<<<<<<< HEAD
-@@ -1283,7 +1287,12 @@ static void device_destroy_be_watch_cb(l
-=======
 @@ -1327,7 +1331,12 @@ static void device_destroy_be_watch_cb(l
->>>>>>> upstream/stable-9
          goto out;
      }
  

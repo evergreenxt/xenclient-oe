@@ -140,13 +140,9 @@ fs_manage_tmpfs_dirs(tapdisk_t)
 # tapdisk sometimes inherits an initrc_t file descriptor on /dev/null
 # allowing it to use it should have a similar effect than dontaudit-ing it
 # replace the following line with `init_use_script_fds(tapdisk_t)` to allow
-<<<<<<< HEAD
-init_dontaudit_use_fds(tapdisk_t)
-=======
 init_dontaudit_use_script_fds(tapdisk_t)
 # same for the initscript firstboot.sh that runs in its own domain
 firstboot_dontaudit_use_fds(tapdisk_t)
->>>>>>> upstream/stable-9
 
 #######################################
 #

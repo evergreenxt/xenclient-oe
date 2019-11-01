@@ -458,18 +458,11 @@ match_acm() {
 
 calculate_drtm_pcrs() {
     local root="${1:-/}"
-<<<<<<< HEAD:recipes-openxt/openxt/openxt-measuredlaunch/ml-functions
-    local grub_conf=${2}
-    local hashalg="${3}"
-    local quirk="${4}"
-    shift 4
-=======
     local conf=${2}
     local hashalg=${3}
     local srtm="${4}"
     local tbver="${5}"
     shift 5
->>>>>>> upstream/stable-9:recipes-openxt/openxt-measuredlaunch/openxt-measuredlaunch/ml-functions
     local evtlog_ovr="${@}"
     local p17=''
     local p18=''

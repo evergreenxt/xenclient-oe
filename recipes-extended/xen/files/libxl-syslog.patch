@@ -39,11 +39,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -43,27 +43,6 @@ static const char *qemu_xen_path(libxl__
-=======
 @@ -44,27 +44,6 @@ static const char *qemu_xen_path(libxl__
->>>>>>> upstream/stable-9
      return QEMU_XEN_PATH;
  }
  
@@ -71,11 +67,7 @@ PATCHES
  const char *libxl__domain_device_model(libxl__gc *gc,
                                         const libxl_domain_build_info *info)
  {
-<<<<<<< HEAD
-@@ -2139,11 +2118,10 @@ void libxl__spawn_local_dm(libxl__egc *e
-=======
 @@ -2235,11 +2214,10 @@ void libxl__spawn_local_dm(libxl__egc *e
->>>>>>> upstream/stable-9
  
      libxl_ctx *ctx = CTX;
      libxl_domain_config *guest_config = dmss->guest_config;
@@ -88,11 +80,7 @@ PATCHES
      int rc;
      char **args, **arg, **envs;
      xs_transaction_t t;
-<<<<<<< HEAD
-@@ -2197,12 +2175,6 @@ void libxl__spawn_local_dm(libxl__egc *e
-=======
 @@ -2293,12 +2271,6 @@ void libxl__spawn_local_dm(libxl__egc *e
->>>>>>> upstream/stable-9
          libxl__xs_printf(gc, XBT_NULL, GCSPRINTF("%s/disable_pf", path),
                           "%d", !libxl_defbool_val(b_info->u.hvm.xen_platform_pci));
  
@@ -105,11 +93,7 @@ PATCHES
      null = open("/dev/null", O_RDONLY);
      if (null < 0) {
          LOGED(ERROR, domid, "unable to open /dev/null");
-<<<<<<< HEAD
-@@ -2256,14 +2228,13 @@ retry_transaction:
-=======
 @@ -2352,14 +2324,13 @@ retry_transaction:
->>>>>>> upstream/stable-9
          goto out_close;
      if (!rc) { /* inner child */
          setsid();
@@ -125,11 +109,7 @@ PATCHES
  out:
      if (dm_state_fd >= 0) close(dm_state_fd);
      if (rc)
-<<<<<<< HEAD
-@@ -2352,7 +2323,7 @@ void libxl__spawn_qdisk_backend(libxl__e
-=======
 @@ -2448,7 +2419,7 @@ void libxl__spawn_qdisk_backend(libxl__e
->>>>>>> upstream/stable-9
      flexarray_t *dm_args, *dm_envs;
      char **args, **envs;
      const char *dm;
@@ -138,11 +118,7 @@ PATCHES
      uint32_t domid = dmss->guest_domid;
  
      /* Always use qemu-xen as device model */
-<<<<<<< HEAD
-@@ -2377,11 +2348,6 @@ void libxl__spawn_qdisk_backend(libxl__e
-=======
 @@ -2473,11 +2444,6 @@ void libxl__spawn_qdisk_backend(libxl__e
->>>>>>> upstream/stable-9
      libxl__set_qemu_env_for_xsa_180(gc, dm_envs);
      envs = (char **) flexarray_contents(dm_envs);
  
@@ -154,11 +130,7 @@ PATCHES
      null = open("/dev/null", O_RDONLY);
      if (null < 0) {
         rc = ERROR_FAIL;
-<<<<<<< HEAD
-@@ -2414,12 +2380,11 @@ void libxl__spawn_qdisk_backend(libxl__e
-=======
 @@ -2510,12 +2476,11 @@ void libxl__spawn_qdisk_backend(libxl__e
->>>>>>> upstream/stable-9
          goto out;
      if (!rc) { /* inner child */
          setsid();
@@ -231,11 +203,7 @@ PATCHES
  }
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
-<<<<<<< HEAD
-@@ -55,6 +55,9 @@
-=======
 @@ -57,6 +57,9 @@
->>>>>>> upstream/stable-9
  #include <xenguest.h>
  #include <xc_dom.h>
  
@@ -257,11 +225,7 @@ PATCHES
  #include <libxl.h>
  #include <libxl_utils.h>
  #include <libxlutil.h>
-<<<<<<< HEAD
-@@ -325,6 +328,8 @@ static void xl_ctx_free(void)
-=======
 @@ -340,6 +343,8 @@ static void xl_ctx_free(void)
->>>>>>> upstream/stable-9
          free(lockfile);
          lockfile = NULL;
      }
@@ -270,11 +234,7 @@ PATCHES
  }
  
  int main(int argc, char **argv)
-<<<<<<< HEAD
-@@ -367,6 +372,8 @@ int main(int argc, char **argv)
-=======
 @@ -382,6 +387,8 @@ int main(int argc, char **argv)
->>>>>>> upstream/stable-9
      logger = xtl_createlogger_stdiostream(stderr, minmsglevel,
          (progress_use_cr ? XTL_STDIOSTREAM_PROGRESS_USE_CR : 0));
      if (!logger) exit(EXIT_FAILURE);
@@ -285,9 +245,6 @@ PATCHES
  
 --- a/tools/xl/xl_utils.c
 +++ b/tools/xl/xl_utils.c
-<<<<<<< HEAD
-@@ -250,7 +250,6 @@ void print_bitmap(uint8_t *map, int mapl
-=======
 @@ -20,6 +20,7 @@
  #include <sys/stat.h>
  #include <sys/types.h>
@@ -311,7 +268,6 @@ PATCHES
  }
  
 @@ -250,7 +253,6 @@ void print_bitmap(uint8_t *map, int mapl
->>>>>>> upstream/stable-9
  
  int do_daemonize(char *name, const char *pidfile)
  {

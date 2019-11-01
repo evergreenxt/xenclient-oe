@@ -57,11 +57,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
-<<<<<<< HEAD
-@@ -753,7 +753,8 @@ int libxl__device_destroy(libxl__gc *gc,
-=======
 @@ -789,7 +789,8 @@ int libxl__device_destroy(libxl__gc *gc,
->>>>>>> upstream/stable-9
              libxl__xs_path_cleanup(gc, t, be_path);
          }
  
@@ -71,11 +67,7 @@ PATCHES
              libxl__xs_path_cleanup(gc, t, be_path);
          }
  
-<<<<<<< HEAD
-@@ -1293,7 +1294,9 @@ static void device_destroy_be_watch_cb(l
-=======
 @@ -1337,7 +1338,9 @@ static void device_destroy_be_watch_cb(l
->>>>>>> upstream/stable-9
       * in xenstore. NDVM doesn't do that, so let's not wait forever
       * here. libxl will take care of the xenstore nodes later
       */
@@ -86,11 +78,7 @@ PATCHES
          /* backend path still exists, wait a little longer... */
          return;
      }
-<<<<<<< HEAD
-@@ -1425,6 +1428,15 @@ int libxl__device_nextid(libxl__gc *gc,
-=======
 @@ -1470,6 +1473,15 @@ int libxl__device_nextid(libxl__gc *gc,
->>>>>>> upstream/stable-9
      else
          nextid = strtoul(l[nb - 1], NULL, 10) + 1;
  
@@ -106,11 +94,7 @@ PATCHES
      return nextid;
  }
  
-<<<<<<< HEAD
-@@ -1563,9 +1575,11 @@ static int add_device(libxl__egc *egc, l
-=======
 @@ -1608,9 +1620,11 @@ static int add_device(libxl__egc *egc, l
->>>>>>> upstream/stable-9
  
      switch(dev->backend_kind) {
      case LIBXL__DEVICE_KIND_VBD:
@@ -124,11 +108,7 @@ PATCHES
  
          GCNEW(aodev);
          libxl__prepare_ao_device(ao, aodev);
-<<<<<<< HEAD
-@@ -1611,9 +1625,11 @@ static int remove_device(libxl__egc *egc
-=======
 @@ -1656,9 +1670,11 @@ static int remove_device(libxl__egc *egc
->>>>>>> upstream/stable-9
  
      switch(ddev->dev->backend_kind) {
      case LIBXL__DEVICE_KIND_VBD:
@@ -154,11 +134,7 @@ PATCHES
                                     libxl__device_backend_path(gc, device)),
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -1216,9 +1216,12 @@ static int libxl__build_device_model_arg
-=======
 @@ -1256,9 +1256,12 @@ static int libxl__build_device_model_arg
->>>>>>> upstream/stable-9
                                                  LIBXL_NIC_TYPE_VIF_IOEMU);
                  flexarray_append(dm_args, "-device");
                  flexarray_append(dm_args,
@@ -174,11 +150,7 @@ PATCHES
                  flexarray_append(dm_args, "-netdev");
                  flexarray_append(dm_args,
                                   GCSPRINTF("type=tap,id=net%d,ifname=%s,"
-<<<<<<< HEAD
-@@ -1690,6 +1693,8 @@ static void libxl__dm_vifs_from_hvm_gues
-=======
 @@ -1784,6 +1787,9 @@ static void libxl__dm_vifs_from_hvm_gues
->>>>>>> upstream/stable-9
          libxl_device_nic_init(&dm_config->nics[i]);
          libxl_device_nic_copy(ctx, &dm_config->nics[i], &guest_config->nics[i]);
          dm_config->nics[i].nictype = LIBXL_NIC_TYPE_VIF;
@@ -224,26 +196,9 @@ PATCHES
      libxl_device_nic_init(nic);
 +    libxl_defbool_setdefault(&nic->wireless, false);
  
-<<<<<<< HEAD
-     if (nic->devid == -1) {
-+        /* This works for vwifs too */
-         if ((nic->devid = libxl__device_nextid(gc, domid, "vif")) < 0) {
-             rc = ERROR_FAIL;
-             goto out;
-@@ -367,6 +375,7 @@ static int libxl__device_nic_from_xensto
-     int rc;
- 
-     libxl_device_nic_init(nic);
-+    libxl_defbool_setdefault(&nic->wireless, false);
- 
-     rc = libxl__xs_read_checked(gc, XBT_NULL,
-                                 GCSPRINTF("%s/handle", libxl_path), &tmp);
-@@ -385,6 +394,10 @@ static int libxl__device_nic_from_xensto
-=======
      rc = libxl__xs_read_checked(gc, XBT_NULL,
                                  GCSPRINTF("%s/handle", libxl_path), &tmp);
 @@ -277,6 +279,10 @@ static int libxl__nic_from_xenstore(libx
->>>>>>> upstream/stable-9
          rc = ERROR_FAIL;
          goto out;
      }
@@ -254,66 +209,8 @@ PATCHES
      rc = libxl__backendpath_parse_domid(gc, tmp, &nic->backend_domid);
      if (rc) goto out;
  
-<<<<<<< HEAD
-@@ -508,6 +521,10 @@ int libxl_devid_to_device_nic(libxl_ctx
-     libxl_path = GCSPRINTF("%s/device/vif/%d", libxl_dom_path, devid);
- 
-     rc = libxl__device_nic_from_xenstore(gc, libxl_path, nic);
-+    if (rc) {
-+        libxl_path = GCSPRINTF("%s/device/vwif/%d", libxl_dom_path, devid);
-+        rc = libxl__device_nic_from_xenstore(gc, libxl_path, nic);
-+    }
-     if (rc) goto out;
- 
-     rc = 0;
-@@ -519,13 +536,14 @@ out:
- static int libxl__append_nic_list(libxl__gc *gc,
-                                            uint32_t domid,
-                                            libxl_device_nic **nics,
--                                           int *nnics)
-+                                           int *nnics,
-+                                           bool vwif)
- {
-     char *libxl_dir_path = NULL;
-     char **dir = NULL;
-     unsigned int n = 0;
-     libxl_device_nic *pnic = NULL, *pnic_end = NULL;
--    int rc;
-+    int rc, rc2;
- 
-     libxl_dir_path = GCSPRINTF("%s/device/vif",
-                                libxl__xs_libxl_path(gc, domid));
-@@ -546,9 +564,14 @@ static int libxl__append_nic_list(libxl_
-         }
-         *nnics += n;
-     }
--    return 0;
-+    rc = 0;
- 
-  out:
-+    if (!vwif) {
-+        rc2 = libxl__append_nic_list(gc, domid, nics, nnics, true);
-+        if (rc2 == 0)
-+            return 0;
-+    }
-     return rc;
- }
- 
-@@ -560,7 +583,7 @@ libxl_device_nic *libxl_device_nic_list(
- 
-     *num = 0;
- 
--    rc = libxl__append_nic_list(gc, domid, &nics, num);
-+    rc = libxl__append_nic_list(gc, domid, &nics, num, false);
-     if (rc) goto out_err;
- 
-     GC_FREE;
-@@ -587,9 +610,15 @@ int libxl_device_nic_getinfo(libxl_ctx *
-     dompath = libxl__xs_get_dompath(gc, domid);
-=======
 @@ -413,10 +419,17 @@ int libxl_device_nic_getinfo(libxl_ctx *
  
->>>>>>> upstream/stable-9
      nicinfo->devid = nic->devid;
  
 -    nicpath = libxl__domain_device_frontend_path(gc, domid, nicinfo->devid,
@@ -412,11 +309,7 @@ PATCHES
  LIBXL_DEFINE_DEVICE_REMOVE(nic)
 --- a/tools/libxl/libxl_types.idl
 +++ b/tools/libxl/libxl_types.idl
-<<<<<<< HEAD
-@@ -673,6 +673,7 @@ libxl_device_nic = Struct("device_nic",
-=======
 @@ -696,6 +696,7 @@ libxl_device_nic = Struct("device_nic",
->>>>>>> upstream/stable-9
      ("rate_bytes_per_interval", uint64),
      ("rate_interval_usecs", uint32),
      ("gatewaydev", string),

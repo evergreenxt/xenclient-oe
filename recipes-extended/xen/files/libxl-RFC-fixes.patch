@@ -35,11 +35,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -1681,12 +1681,14 @@ static void libxl__dm_vifs_from_hvm_gues
-=======
 @@ -1750,12 +1750,14 @@ static void libxl__dm_vifs_from_hvm_gues
->>>>>>> upstream/stable-9
                                      libxl_domain_config * const guest_config,
                                      libxl_domain_config *dm_config)
  {
@@ -55,11 +51,7 @@ PATCHES
          dm_config->nics[i].nictype = LIBXL_NIC_TYPE_VIF;
          if (dm_config->nics[i].ifname)
              dm_config->nics[i].ifname = GCSPRINTF("%s" TAP_DEVICE_SUFFIX,
-<<<<<<< HEAD
-@@ -2148,7 +2150,10 @@ static void stub_dm_watch_event(libxl__e
-=======
 @@ -2244,7 +2246,10 @@ static void stub_dm_watch_event(libxl__e
->>>>>>> upstream/stable-9
          if (dm_domid) {
              sdss->dis.ao = sdss->dm.spawn.ao;
              sdss->dis.domid = dm_domid;

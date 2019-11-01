@@ -34,11 +34,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -2131,6 +2131,39 @@ out:
-=======
 @@ -2227,6 +2227,39 @@ out:
->>>>>>> upstream/stable-9
      stubdom_pvqemu_cb(egc, &sdss->multidev, rc);
  }
  
@@ -78,11 +74,7 @@ PATCHES
  static void stubdom_pvqemu_cb(libxl__egc *egc,
                                libxl__multidev *multidev,
                                int rc)
-<<<<<<< HEAD
-@@ -2138,6 +2171,7 @@ static void stubdom_pvqemu_cb(libxl__egc
-=======
 @@ -2234,6 +2267,7 @@ static void stubdom_pvqemu_cb(libxl__egc
->>>>>>> upstream/stable-9
      libxl__stub_dm_spawn_state *sdss = CONTAINER_OF(multidev, *sdss, multidev);
      STATE_AO_GC(sdss->dm.spawn.ao);
      uint32_t dm_domid = sdss->pvqemu.guest_domid;
@@ -90,11 +82,7 @@ PATCHES
  
      libxl__xswait_init(&sdss->xswait);
  
-<<<<<<< HEAD
-@@ -2147,6 +2181,17 @@ static void stubdom_pvqemu_cb(libxl__egc
-=======
 @@ -2243,6 +2277,17 @@ static void stubdom_pvqemu_cb(libxl__egc
->>>>>>> upstream/stable-9
          goto out;
      }
  

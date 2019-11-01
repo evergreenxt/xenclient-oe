@@ -610,11 +610,7 @@ PATCHES
 +MODULE_LICENSE("Dual BSD/GPL");
 --- /dev/null
 +++ b/drivers/block/blktap/device.c
-<<<<<<< HEAD
-@@ -0,0 +1,683 @@
-=======
 @@ -0,0 +1,686 @@
->>>>>>> upstream/stable-9
 +#include <linux/fs.h>
 +#include <linux/blkdev.h>
 +#include <linux/cdrom.h>

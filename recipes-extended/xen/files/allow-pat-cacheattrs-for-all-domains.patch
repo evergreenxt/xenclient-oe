@@ -36,11 +36,7 @@ PATCHES
 ################################################################################
 --- a/xen/arch/x86/mm.c
 +++ b/xen/arch/x86/mm.c
-<<<<<<< HEAD
-@@ -168,13 +168,7 @@ static uint32_t base_disallow_mask;
-=======
 @@ -164,13 +164,7 @@ static uint32_t base_disallow_mask;
->>>>>>> upstream/stable-9
  
  #define L4_DISALLOW_MASK (base_disallow_mask)
  

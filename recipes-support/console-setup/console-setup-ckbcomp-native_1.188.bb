@@ -7,11 +7,7 @@ RDEPENDS_${PN} = "perl-native"
 
 # Don't bother building the whole package. We only want the ckbcomp script.
 
-<<<<<<< HEAD:recipes-support/console-setup/console-setup-ckbcomp-native_1.88.bb
-SRC_URI = "http://archive.debian.org/debian/pool/main/c/console-setup/console-setup_${PV}.tar.gz"
-=======
 SRC_URI = "${DEBIAN_MIRROR}/main/c/console-setup/console-setup_${PV}.tar.xz"
->>>>>>> upstream/stable-9:recipes-support/console-setup/console-setup-ckbcomp-native_1.188.bb
 
 S = "${WORKDIR}/console-setup-${PV}"
 

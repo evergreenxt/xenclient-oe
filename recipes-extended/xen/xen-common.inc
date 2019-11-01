@@ -1,15 +1,8 @@
 LIC_FILES_CHKSUM := "file://COPYING;md5=bbb4b1bdc2c3b6743da3c39d03249095"
 require xen-version.inc
 
-<<<<<<< HEAD
-require xen-version.inc
-
 PV = "${XEN_PV}"
 
-=======
-PV = "${XEN_PV}"
-
->>>>>>> upstream/stable-9
 SRCREV = "${XEN_SRCREV}"
 SRC_URI = "git://xenbits.xen.org/xen.git;branch=${XEN_BRANCH}"
 
@@ -90,53 +83,18 @@ SRC_URI_append = " \
     file://libxl-disable-json-updates.patch \
     file://libxl-allow-non-qdisk-cdrom.patch \
     file://libxl-fix-flr.patch \
-<<<<<<< HEAD
-    file://xsa226-4.9/0001-gnttab-dont-use-possibly-unbounded-tail-calls.patch \
-    file://xsa226-4.9/0002-gnttab-fix-transitive-grant-handling.patch \
-    file://xsa226-4.9/0003-gnttab-fix-don-t-use-possibly-unbounded-tail-calls.patch \
-    file://xsa227.patch \
-    file://xsa228.patch \
-    file://xsa230.patch \
-    file://xsa231-4.9.patch \
-    file://xsa232.patch \
-    file://xsa233.patch \
-    file://xsa234-4.9.patch \
-    file://xsa235-4.9.patch \
-    file://xsa237-4.9/0001-x86-dont-allow-MSI-pIRQ-mapping-on-unowned-device.patch \
-    file://xsa237-4.9/0002-x86-enforce-proper-privilege-when-mapping-pIRQ-s.patch \
-    file://xsa237-4.9/0003-x86-MSI-disallow-redundant-enabling.patch \
-    file://xsa237-4.9/0004-x86-IRQ-conditionally-preserve-irq-pirq-mapping-on-error.patch \
-    file://xsa237-4.9/0005-x86-FLASK-fix-unmap-domain-IRQ-XSM-hook.patch \
-    file://xsa238.patch \
-    file://xsa239.patch \
-    file://xsa240-4.9/0001-x86-limit-linear-page-table-use-to-a-single-level.patch \
-    file://xsa240-4.9/0002-x86-mm-Disable-PV-linear-pagetables-by-default.patch \
-    file://xsa241-4.9.patch \
-    file://xsa242-4.9.patch \
-    file://xsa243.patch \
-    file://xsa244.patch \
-    file://xen-tpm-passthrough.patch;patch=1 \
-=======
     file://libxl-disable-vnc-query-when-disabled.patch \
     file://xl-shutdown-wait-for-domain-death.patch \
-<<<<<<< HEAD
-    file://domain-reboot.patch \
-=======
     file://libxl-allow-save-vnuma.patch \
     file://domain-reboot.patch \
     file://libxl-retry-qmp-pci-add.patch \
->>>>>>> upstream/stable-9
     ${BLKTAP_PATCHQUEUE} \
     file://efi-hardcode-openxt-cfg.patch \
     file://0001-EFI-add-EFI_LOAD_OPTION-support.patch \
     file://shim-support-for-shim-lock-measure.patch \
     file://efi-require-shim.patch \
-<<<<<<< HEAD
->>>>>>> upstream/stable-8
-=======
     file://tboot-measure-and-launch-from-xen-efi.patch \
     file://efi-load-options-no-default-image-name.patch \
->>>>>>> upstream/stable-9
     file://testscrubbing.patch \
 "
 
@@ -146,11 +104,8 @@ PACKAGECONFIG =+ "xsm"
 PACKAGECONFIG =+ "hvm"
 
 S = "${WORKDIR}/git"
-<<<<<<< HEAD
-=======
 
 TUNE_CCARGS := "${@oe.utils.str_filter_out('-msse3', '${TUNE_CCARGS}', d)}"
->>>>>>> upstream/stable-9
 
 #--
 # Override meta-virtualization's path to seabios and add ovmf:

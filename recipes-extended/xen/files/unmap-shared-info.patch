@@ -63,12 +63,7 @@ PATCHES
      struct vnuma_info *vnuma;
 --- a/xen/arch/x86/mm.c
 +++ b/xen/arch/x86/mm.c
-<<<<<<< HEAD
-@@ -5239,6 +5239,8 @@ int xenmem_add_to_physmap_one(
-     unsigned long prev_mfn, mfn = 0, old_gpfn;
-=======
 @@ -4279,6 +4279,9 @@ int xenmem_add_to_physmap_one(
->>>>>>> upstream/stable-9
      int rc = 0;
      mfn_t mfn = INVALID_MFN;
      p2m_type_t p2mt;
@@ -78,11 +73,7 @@ PATCHES
  
      if ( !paging_mode_translate(d) )
          return -EACCES;
-<<<<<<< HEAD
-@@ -5248,6 +5250,11 @@ int xenmem_add_to_physmap_one(
-=======
 @@ -4288,6 +4291,11 @@ int xenmem_add_to_physmap_one(
->>>>>>> upstream/stable-9
          case XENMAPSPACE_shared_info:
              if ( idx == 0 )
                  mfn = virt_to_mfn(d->shared_info);
@@ -93,10 +84,6 @@ PATCHES
 +                unmap_shinfo = 1;
              break;
          case XENMAPSPACE_grant_table:
-<<<<<<< HEAD
-             grant_write_lock(d->grant_table);
-@@ -5303,24 +5310,35 @@ int xenmem_add_to_physmap_one(
-=======
              rc = gnttab_map_frame(d, idx, gpfn, &mfn);
 @@ -4317,25 +4325,26 @@ int xenmem_add_to_physmap_one(
              break;
@@ -106,7 +93,6 @@ PATCHES
 +    prev_mfn = mfn_x(get_gfn(d, gpfn_new, &p2mt));
 +
      if ( mfn_eq(mfn, INVALID_MFN) )
->>>>>>> upstream/stable-9
      {
          rc = -EINVAL;
          goto put_both;
@@ -132,11 +118,7 @@ PATCHES
  
      if ( rc )
          goto put_both;
-<<<<<<< HEAD
-@@ -5339,13 +5357,28 @@ int xenmem_add_to_physmap_one(
-=======
 @@ -4353,13 +4362,28 @@ int xenmem_add_to_physmap_one(
->>>>>>> upstream/stable-9
  
      /* Map at new location. */
      if ( !rc )

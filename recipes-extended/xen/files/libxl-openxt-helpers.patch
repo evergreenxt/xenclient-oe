@@ -43,12 +43,6 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -1930,6 +1930,41 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-     if (ret)
-         goto out;
-     uint32_t dm_domid = sdss->pvqemu.guest_domid;
-=======
 @@ -25,6 +25,10 @@
  #include <pwd.h>
  #include <grp.h>
@@ -75,7 +69,6 @@ PATCHES
 +static void fork_helper(libxl__gc *gc, const char *helper_path,
 +                        const char *xs_pid_key, int guest_domid, int dm_domid)
 +{
->>>>>>> upstream/stable-9
 +    pid_t pid;
 +
 +    pid = fork();
@@ -110,14 +103,6 @@ PATCHES
 +                    dm_domid);
 +    }
 +
-<<<<<<< HEAD
-     ret = libxl__domain_build(gc, dm_config, dm_domid, stubdom_state);
-     if (ret)
-         goto out;
---- a/tools/libxl/libxl_domain.c
-+++ b/tools/libxl/libxl_domain.c
-@@ -992,6 +992,7 @@ void libxl__destroy_domid(libxl__egc *eg
-=======
 +    if (need_audio_helper) {
 +        /* OpenXT: Start the audio helper */
 +        fork_helper(gc, AUDIO_HELPER_PATH, XS_AUDIO_PID, guest_domid, dm_domid);
@@ -129,7 +114,6 @@ PATCHES
 --- a/tools/libxl/libxl_domain.c
 +++ b/tools/libxl/libxl_domain.c
 @@ -1023,6 +1023,7 @@ void libxl__destroy_domid(libxl__egc *eg
->>>>>>> upstream/stable-9
      uint32_t domid = dis->domid;
      char *dom_path;
      int rc, dm_present;
@@ -173,11 +157,7 @@ PATCHES
      dis->drs.callback = devices_destroy_cb;
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
-<<<<<<< HEAD
-@@ -127,6 +127,10 @@
-=======
 @@ -131,6 +131,13 @@
->>>>>>> upstream/stable-9
  #define MB(_mb)     (_AC(_mb, ULL) << 20)
  #define GB(_gb)     (_AC(_gb, ULL) << 30)
  
@@ -193,11 +173,7 @@ PATCHES
  #define ROUNDUP(_val, _order)                                           \
 --- a/tools/libxl/libxl_create.c
 +++ b/tools/libxl/libxl_create.c
-<<<<<<< HEAD
-@@ -1528,12 +1528,10 @@ static void domcreate_devmodel_started(l
-=======
 @@ -1590,12 +1590,10 @@ static void domcreate_devmodel_started(l
->>>>>>> upstream/stable-9
      if (dcs->sdss.dm.guest_domid) {
          if (d_config->b_info.device_model_version
              == LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN) {

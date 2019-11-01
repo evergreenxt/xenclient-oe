@@ -48,15 +48,9 @@ PATCHES
 ################################################################################
 --- a/tools/include/xen-sys/Linux/privcmd.h
 +++ b/tools/include/xen-sys/Linux/privcmd.h
-<<<<<<< HEAD
-@@ -86,6 +86,11 @@ typedef struct privcmd_dm_op {
- 	const privcmd_dm_op_buf_t __user *ubufs;
- } privcmd_dm_op_t;
-=======
 @@ -95,6 +95,11 @@ typedef struct privcmd_mmap_resource {
  	__u64 addr;
  } privcmd_mmap_resource_t;
->>>>>>> upstream/stable-9
  
 +typedef struct privcmd_mmapcacheattr {
 +       __u64 addr;
@@ -76,13 +70,8 @@ PATCHES
  #endif /* __LINUX_PUBLIC_PRIVCMD_H__ */
 --- a/tools/libs/foreignmemory/core.c
 +++ b/tools/libs/foreignmemory/core.c
-<<<<<<< HEAD
-@@ -100,6 +100,46 @@ void *xenforeignmemory_map(xenforeignmem
-     return ret;
-=======
 @@ -125,6 +125,46 @@ void *xenforeignmemory_map(xenforeignmem
      return xenforeignmemory_map2(fmem, dom, NULL, prot, 0, num, arr, err);
->>>>>>> upstream/stable-9
  }
  
 +void *xenforeignmemory_map_cacheattr(xenforeignmemory_handle *fmem,
@@ -130,13 +119,8 @@ PATCHES
  {
 --- a/tools/libs/foreignmemory/include/xenforeignmemory.h
 +++ b/tools/libs/foreignmemory/include/xenforeignmemory.h
-<<<<<<< HEAD
-@@ -108,6 +108,14 @@ void *xenforeignmemory_map(xenforeignmem
-                            const xen_pfn_t arr[/*pages*/], int err[/*pages*/]);
-=======
 @@ -120,6 +120,14 @@ void *xenforeignmemory_map2(xenforeignme
                              const xen_pfn_t arr[/*pages*/], int err[/*pages*/]);
->>>>>>> upstream/stable-9
  
  /*
 + * Similar to xenforeignmemory_map, takes an additional argument
@@ -162,11 +146,7 @@ PATCHES
  };
 --- a/tools/libs/foreignmemory/linux.c
 +++ b/tools/libs/foreignmemory/linux.c
-<<<<<<< HEAD
-@@ -141,13 +141,16 @@ out:
-=======
 @@ -141,13 +141,17 @@ out:
->>>>>>> upstream/stable-9
      return rc;
  }
  
@@ -187,12 +167,8 @@ PATCHES
 +    privcmd_mmapcacheattr_t cacheattr;
      size_t i;
      int rc;
-<<<<<<< HEAD
-@@ -160,6 +163,20 @@ void *osdep_xenforeignmemory_map(xenfore
-=======
  
 @@ -159,6 +163,20 @@ void *osdep_xenforeignmemory_map(xenfore
->>>>>>> upstream/stable-9
          return NULL;
      }
  
@@ -213,11 +189,7 @@ PATCHES
      ioctlx.num = num;
      ioctlx.dom = dom;
      ioctlx.addr = (unsigned long)addr;
-<<<<<<< HEAD
-@@ -266,6 +283,25 @@ void *osdep_xenforeignmemory_map(xenfore
-=======
 @@ -265,6 +283,27 @@ void *osdep_xenforeignmemory_map(xenfore
->>>>>>> upstream/stable-9
      return addr;
  }
  
@@ -247,15 +219,9 @@ PATCHES
  {
 --- a/tools/libs/foreignmemory/private.h
 +++ b/tools/libs/foreignmemory/private.h
-<<<<<<< HEAD
-@@ -29,6 +29,11 @@ void *osdep_xenforeignmemory_map(xenfore
-                                  uint32_t dom, int prot,
-                                  size_t num,
-=======
 @@ -32,6 +32,11 @@ void *osdep_xenforeignmemory_map(xenfore
                                   uint32_t dom, void *addr,
                                   int prot, int flags, size_t num,
->>>>>>> upstream/stable-9
                                   const xen_pfn_t arr[num], int err[num]);
 +void *osdep_xenforeignmemory_map_cacheattr(xenforeignmemory_handle *fmem,
 +                                           uint32_t dom, int prot,
@@ -267,11 +233,7 @@ PATCHES
  
 --- a/tools/libxc/include/xenctrl.h
 +++ b/tools/libxc/include/xenctrl.h
-<<<<<<< HEAD
-@@ -1558,6 +1558,19 @@ int xc_tbuf_disable(xc_interface *xch);
-=======
 @@ -1589,6 +1589,19 @@ int xc_tbuf_disable(xc_interface *xch);
->>>>>>> upstream/stable-9
   */
  int xc_tbuf_set_size(xc_interface *xch, unsigned long size);
  

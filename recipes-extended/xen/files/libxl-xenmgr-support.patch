@@ -170,41 +170,6 @@ PATCHES
  out:
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -631,7 +631,7 @@ static int libxl__build_device_model_arg
-     }
-     for (i = 0; b_info->extra && b_info->extra[i] != NULL; i++)
-         flexarray_append(dm_args, b_info->extra[i]);
--    flexarray_append(dm_args, "-M");
-+    flexarray_append(dm_args, "-machine");
-     switch (b_info->type) {
-     case LIBXL_DOMAIN_TYPE_PV:
-         flexarray_append(dm_args, "xenpv");
-@@ -1764,7 +1764,7 @@ static int libxl__write_stub_dmargs(libx
-     while (args[i] != NULL) {
-         if (linux_stubdom ||
-             (strcmp(args[i], "-sdl") &&
--             strcmp(args[i], "-M") && strcmp(args[i], "xenfv"))) {
-+             strcmp(args[i], "-machine") && strcmp(args[i], "xenfv"))) {
-             strcat(dmargs, " ");
-             strcat(dmargs, args[i]);
-         }
-@@ -1968,9 +1968,26 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-                              &stubdom_state->config);
-     if (ret)
-         goto out;
-+
-     uint32_t dm_domid = sdss->pvqemu.guest_domid;
--    pid_t pid;
- 
-+    libxl__xs_printf(gc, XBT_NULL,
-+                   GCSPRINTF("%s/image/device-model-domid",
-+                             libxl__xs_get_dompath(gc, guest_domid)),
-+                   "%d", dm_domid);
-+
-+	int32_t timeout = 0;
-+	char * ready = NULL;
-=======
 @@ -2131,6 +2131,24 @@ retry_transaction:
      libxl__xs_printf(gc, XBT_NULL,
                       DEVICE_MODEL_XS_PATH(gc, dm_domid, guest_domid, "/xen_extended_power_mgmt"), "2");
@@ -217,7 +182,6 @@ PATCHES
 +    const char *firewall_path =
 +        GCSPRINTF("%s/v4v-firewall-ready",
 +                  libxl__xs_get_dompath(gc, guest_domid));
->>>>>>> upstream/stable-9
 +    /* Block and wait for v4v firewall rules */
 +    for (timeout = 0; !ready && timeout < 4; ++timeout) {
 +        ready = xs_read(ctx->xsh, XBT_NULL, firewall_path, NULL);
@@ -228,27 +192,9 @@ PATCHES
 +        sleep(1);
 +    }
 +
-<<<<<<< HEAD
-+    pid_t pid;
-     /* OpenXT: Start the QMP helper */
-     pid = fork();
-     if (pid == -1)
-@@ -2015,10 +2032,6 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-     libxl__write_stub_dmargs(gc, dm_domid, guest_domid, args,
-          guest_config->b_info.stubdomain_version == LIBXL_STUBDOMAIN_VERSION_LINUX);
-     libxl__xs_printf(gc, XBT_NULL,
--                     GCSPRINTF("%s/image/device-model-domid",
--                               libxl__xs_get_dompath(gc, guest_domid)),
--                     "%d", dm_domid);
--    libxl__xs_printf(gc, XBT_NULL,
-                      GCSPRINTF("%s/target",
-                                libxl__xs_get_dompath(gc, dm_domid)),
-                      "%d", guest_domid);
-=======
      libxl__multidev_begin(ao, &sdss->multidev);
      sdss->multidev.callback = spawn_stub_launch_dm;
      /* OpenXT: Again, no disk for the stubdom itself */
->>>>>>> upstream/stable-9
 --- a/tools/libxl/libxl_domain.c
 +++ b/tools/libxl/libxl_domain.c
 @@ -703,6 +703,13 @@ static int libxl__domain_pvcontrol(libxl
@@ -317,11 +263,7 @@ PATCHES
  }
 --- a/tools/libxl/libxl_types.idl
 +++ b/tools/libxl/libxl_types.idl
-<<<<<<< HEAD
-@@ -498,6 +498,10 @@ libxl_domain_build_info = Struct("domain
-=======
 @@ -508,6 +508,10 @@ libxl_domain_build_info = Struct("domain
->>>>>>> upstream/stable-9
      # device_model_user is not ready for use yet
      ("device_model_user", string),
  
@@ -342,21 +284,12 @@ PATCHES
      XLU_Config *config;
 -    XLU_ConfigList *cpus, *vbds, *nics, *pcis, *cvfbs, *cpuids, *vtpms,
 +    XLU_ConfigList *cpus, *vbds, *nics, *pcis, *cpuids, *vtpms,
-<<<<<<< HEAD
-                    *usbctrls, *usbdevs, *p9devs;
-     XLU_ConfigList *channels, *ioports, *irqs, *iomem, *viridian, *dtdevs;
-     int num_ioports, num_irqs, num_iomem, num_cpus, num_viridian;
-@@ -1055,6 +1056,11 @@ void parse_config_data(const char *confi
-     xlu_cfg_get_defbool(config, "driver_domain", &c_info->driver_domain, 0);
-     xlu_cfg_get_defbool(config, "acpi", &b_info->acpi, 0);
-=======
                     *usbctrls, *usbdevs, *p9devs, *vdispls, *pvcallsifs_devs;
      XLU_ConfigList *channels, *ioports, *irqs, *iomem, *viridian, *dtdevs,
                     *mca_caps;
 @@ -1229,6 +1230,11 @@ void parse_config_data(const char *confi
  
      xlu_cfg_get_defbool(config, "nestedhvm", &b_info->nested_hvm, 0);
->>>>>>> upstream/stable-9
  
 +    if(!xlu_cfg_get_long(config, "restrictdisplaydepth", &l, 0))
 +        b_info->display_depth = l;
@@ -366,11 +299,7 @@ PATCHES
      switch(b_info->type) {
      case LIBXL_DOMAIN_TYPE_HVM:
          kernel_basename = libxl_basename(b_info->kernel);
-<<<<<<< HEAD
-@@ -1592,64 +1598,38 @@ skip_nic:
-=======
 @@ -1856,64 +1862,38 @@ skip_nic:
->>>>>>> upstream/stable-9
          fprintf(stderr, "WARNING: vif2: netchannel2 is deprecated and not supported by xl\n");
      }
  

@@ -32,11 +32,7 @@ PATCHES
 ################################################################################
 --- a/tools/Rules.mk
 +++ b/tools/Rules.mk
-<<<<<<< HEAD
-@@ -99,59 +99,59 @@ endif
-=======
 @@ -100,54 +100,54 @@ endif
->>>>>>> upstream/stable-9
  
  CFLAGS_libxentoollog = -I$(XEN_LIBXENTOOLLOG)/include $(CFLAGS_xeninclude)
  SHDEPS_libxentoollog =

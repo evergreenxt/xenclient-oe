@@ -23,16 +23,10 @@ SRCREV = "${AUTOREV}"
 SRC_URI = "git://${OPENXT_GIT_MIRROR}/toolstack-data.git;protocol=${OPENXT_GIT_PROTOCOL};branch=${OPENXT_BRANCH}"
 
 S = "${WORKDIR}/git"
-<<<<<<< HEAD
 OUTPUT_DIR = "${S}/dist/script/services"
 STAGING_IDLDATADIR = "${STAGING_DATADIR}/idl"
 
 export STAGING_IDLDATADIR
-=======
-
-export STAGING_IDLDATADIR
-export STAGING_RPCGENDATADIR_NATIVE
->>>>>>> upstream/stable-8
 
 inherit xc-rpcgen
 

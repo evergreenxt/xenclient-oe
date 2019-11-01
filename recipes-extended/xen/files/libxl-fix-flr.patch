@@ -52,11 +52,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
-<<<<<<< HEAD
-@@ -1413,12 +1413,19 @@ _hidden int libxl__pci_topology_init(lib
-=======
 @@ -1428,12 +1428,19 @@ _hidden int libxl__pci_topology_init(lib
->>>>>>> upstream/stable-9
  
  /* from libxl_pci */
  
@@ -77,11 +73,7 @@ PATCHES
  
  /* from libxl_dtdev */
  
-<<<<<<< HEAD
-@@ -3609,6 +3616,7 @@ struct libxl__destroy_domid_state {
-=======
 @@ -3729,6 +3736,7 @@ struct libxl__destroy_domid_state {
->>>>>>> upstream/stable-9
      /* private to implementation */
      libxl__devices_remove_state drs;
      libxl__ev_child destroyer;
@@ -91,11 +83,7 @@ PATCHES
  
 --- a/tools/libxl/libxl_pci.c
 +++ b/tools/libxl/libxl_pci.c
-<<<<<<< HEAD
-@@ -212,7 +212,7 @@ static int libxl__device_pci_remove_xens
-=======
 @@ -215,7 +215,7 @@ static int libxl__device_pci_remove_xens
->>>>>>> upstream/stable-9
          return ERROR_FAIL;
  
      if (domtype == LIBXL_DOMAIN_TYPE_PV) {
@@ -169,11 +157,7 @@ PATCHES
  
 --- a/tools/libxl/libxl_domain.c
 +++ b/tools/libxl/libxl_domain.c
-<<<<<<< HEAD
-@@ -999,6 +999,15 @@ static void domain_destroy_callback(libx
-=======
 @@ -1030,6 +1030,15 @@ static void domain_destroy_callback(libx
->>>>>>> upstream/stable-9
          dds->rc = rc;
      }
  

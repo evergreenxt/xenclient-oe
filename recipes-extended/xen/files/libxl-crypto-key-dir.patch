@@ -51,11 +51,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
-<<<<<<< HEAD
-@@ -1771,7 +1771,8 @@ _hidden int libxl__blktap_enabled(libxl_
-=======
 @@ -1786,7 +1786,8 @@ _hidden int libxl__blktap_enabled(libxl_
->>>>>>> upstream/stable-9
   */
  _hidden char *libxl__blktap_devpath(libxl__gc *gc,
                                      const char *disk,
@@ -64,18 +60,11 @@ PATCHES
 +                                    char *keydir);
  
  _hidden int libxl__get_tap_minor(libxl__gc *gc, libxl_disk_format format, const char *disk);
-<<<<<<< HEAD
- _hidden bool tapdev_is_shared(libxl__gc *gc, const char *params);
---- a/tools/libxl/libxl_types.idl
-+++ b/tools/libxl/libxl_types.idl
-@@ -487,6 +487,9 @@ libxl_domain_build_info = Struct("domain
-=======
  
 --- a/tools/libxl/libxl_types.idl
 +++ b/tools/libxl/libxl_types.idl
 @@ -493,6 +493,9 @@ libxl_domain_build_info = Struct("domain
      ("cpuid",           libxl_cpuid_policy_list),
->>>>>>> upstream/stable-9
      ("blkdev_start",    string),
  
 +    # directory containing the crypto keys for the VM's disks
@@ -96,11 +85,7 @@ PATCHES
  libxl_device_nic = Struct("device_nic", [
 --- a/tools/xl/xl_parse.c
 +++ b/tools/xl/xl_parse.c
-<<<<<<< HEAD
-@@ -1053,6 +1053,7 @@ void parse_config_data(const char *confi
-=======
 @@ -1164,6 +1164,7 @@ void parse_config_data(const char *confi
->>>>>>> upstream/stable-9
      if (!xlu_cfg_get_long(config, "max_event_channels", &l, 0))
          b_info->event_channels = l;
  
@@ -150,11 +135,7 @@ PATCHES
      if (!err) {
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -1502,7 +1502,7 @@ static int libxl__build_device_model_arg
-=======
 @@ -1546,7 +1546,7 @@ static int libxl__build_device_model_arg
->>>>>>> upstream/stable-9
                   */
                  if (disks[i].backend == LIBXL_DISK_BACKEND_TAP)
                      target_path = libxl__blktap_devpath(gc, disks[i].pdev_path,

@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-=======
 # Enable TrueType fonts
 PACKAGECONFIG += "xft"
->>>>>>> upstream/stable-9
 
 do_configure_prepend() {
 	echo >> ${S}/XTerm.ad

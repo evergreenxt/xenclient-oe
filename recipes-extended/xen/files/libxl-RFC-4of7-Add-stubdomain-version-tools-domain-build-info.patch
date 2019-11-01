@@ -43,11 +43,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_create.c
 +++ b/tools/libxl/libxl_create.c
-<<<<<<< HEAD
-@@ -156,12 +156,35 @@ int libxl__domain_build_info_setdefault(
-=======
 @@ -159,12 +159,35 @@ int libxl__domain_build_info_setdefault(
->>>>>>> upstream/stable-9
      }
  
      if (b_info->type == LIBXL_DOMAIN_TYPE_HVM &&

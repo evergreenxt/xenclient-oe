@@ -65,40 +65,6 @@ SRC_URI += " \
 "
 
 # QEMU Patch Queue
-<<<<<<< HEAD:recipes-openxt/qemu-dm/qemu-dm.inc
-SRC_URI += " \
-    file://compile-time-stubdom-flag.patch \
-    file://generic-xenstore-extensions.patch \
-    file://readonly-ide.patch \
-    file://hvm-param-dm-domain.patch \
-    file://logging-syslog.patch \
-    file://dmbus.patch \
-    file://switcher.patch \
-    file://acpi.patch \
-    file://xenmou.patch \
-    file://atapi-pass-through.patch \
-    file://vbe-xt-extensions.patch \
-    file://vga-spinlock.patch \
-    file://vga-shadow-bda.patch \
-    file://surfman-dcl.patch \
-    file://audio-policy.patch \
-    file://msix-cap-disable.patch \
-    file://openxtaudio.patch \
-    file://nic-link-state-propagation.patch \
-    file://stubdom-read-gsi-from-device-config-space.patch \
-    file://acpi-pm-feature.patch \
-    file://maintain-time-offset.patch \
-    file://acpi-wakeup.patch \
-    file://openxt-misc-fixes.patch \
-    file://qmp-v4v-char-driver.patch \
-    file://use-relative-xenstore-nodes.patch \
-    file://exit-mainloop-on-reset.patch \
-    file://write-acpi-state-to-xenstore.patch \
-    file://set-blockdev-ro.patch \
-    file://block-remove-unused-block-format-support.patch \
-    file://net-Remove-unused-network-options.patch \
-"
-=======
 SRC_URI += "file://compile-time-stubdom-flag.patch \
             file://generic-xenstore-extensions.patch \
             file://readonly-ide.patch \
@@ -131,7 +97,6 @@ SRC_URI += "file://compile-time-stubdom-flag.patch \
             file://net-Remove-unused-network-options.patch \
             file://round-pci-region-sizes.patch \
             "
->>>>>>> upstream/stable-9:recipes-extended/qemu-dm/qemu-dm.inc
 
 SRC_URI[md5sum] = "8a75cfd18460143d1b352234e437ca8d"
 SRC_URI[sha256sum] = "98fee0c86b299ebaf08587ba8df1dc8bb7152708d62937a0631875d95cc8d921"

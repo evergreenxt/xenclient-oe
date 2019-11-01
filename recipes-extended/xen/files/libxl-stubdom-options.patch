@@ -37,11 +37,7 @@ PATCHES
 
 --- a/tools/libxl/libxl_types.idl
 +++ b/tools/libxl/libxl_types.idl
-<<<<<<< HEAD
-@@ -511,6 +511,11 @@ libxl_domain_build_info = Struct("domain
-=======
 @@ -521,6 +521,11 @@ libxl_domain_build_info = Struct("domain
->>>>>>> upstream/stable-9
      #  parameters for all type of scheduler
      ("sched_params",     libxl_domain_sched_params),
  
@@ -55,24 +51,15 @@ PATCHES
      ("iomem",            Array(libxl_iomem_range, "num_iomem")),
 --- a/tools/libxl/libxl_dm.c
 +++ b/tools/libxl/libxl_dm.c
-<<<<<<< HEAD
-@@ -1869,6 +1869,7 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-=======
 @@ -1980,6 +1980,7 @@ void libxl__spawn_stub_dm(libxl__egc *eg
->>>>>>> upstream/stable-9
          abort();
      }
      dm_config->b_info.max_memkb += guest_config->b_info.video_memkb;
 +    dm_config->b_info.max_memkb += guest_config->b_info.stubdom_memory;
      dm_config->b_info.target_memkb = dm_config->b_info.max_memkb;
  
-<<<<<<< HEAD
-     dm_config->b_info.u.pv.features = "";
-@@ -1880,6 +1881,7 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-=======
      dm_config->b_info.max_grant_frames = guest_config->b_info.max_grant_frames;
 @@ -1994,6 +1995,8 @@ void libxl__spawn_stub_dm(libxl__egc *eg
->>>>>>> upstream/stable-9
      dm_config->b_info.extra = guest_config->b_info.extra;
      dm_config->b_info.extra_pv = guest_config->b_info.extra_pv;
      dm_config->b_info.extra_hvm = guest_config->b_info.extra_hvm;
@@ -81,43 +68,6 @@ PATCHES
  
      dm_config->disks = guest_config->disks;
      dm_config->num_disks = guest_config->num_disks;
-<<<<<<< HEAD
-@@ -1936,6 +1938,7 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-      */
-     if (guest_config->b_info.stubdomain_version == LIBXL_STUBDOMAIN_VERSION_LINUX) {
-         int dmargs_size = 0;
-+        char kernel_arg_name[] = "openxt_qemu_args";
-         char *dmargs;
-         char **arg;
- 
-@@ -1944,10 +1947,15 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-         arg++;
-         for (; *arg; arg++)
-             dmargs_size = dmargs_size + strlen(*arg) + 1;
-+        dmargs_size = dmargs_size + strlen(dm_config->b_info.stubdom_cmdline) + strlen(kernel_arg_name) + 4;
-         dmargs = (char *) libxl__malloc(gc, dmargs_size);
- 
-         /* Use strcat to concatenate everything */
-         dmargs[0] = '\0';
-+        strcat(dmargs, dm_config->b_info.stubdom_cmdline);
-+        strcat(dmargs, " ");
-+        strcat(dmargs, kernel_arg_name);
-+        strcat(dmargs, "=\"");
-         arg = args;
-         arg++;
-         if (arg) {
-@@ -1958,6 +1966,7 @@ void libxl__spawn_stub_dm(libxl__egc *eg
-             strcat(dmargs, " ");
-             strcat(dmargs, *arg);
-         }
-+        strcat(dmargs, "\"");
- 
-         /* Set the resulting string as the stubdom cmdline */
-         stubdom_state->pv_cmdline = dmargs;
---- a/tools/xl/xl_parse.c
-+++ b/tools/xl/xl_parse.c
-@@ -1856,6 +1856,17 @@ skip_usbdev:
-=======
 @@ -2034,6 +2037,8 @@ void libxl__spawn_stub_dm(libxl__egc *eg
                                libxl__xenfirmwaredir_path());
          stubdom_state->pv_ramdisk.path = libxl__abs_path(gc, "stubdomain-initramfs",
@@ -130,7 +80,6 @@ PATCHES
 --- a/tools/xl/xl_parse.c
 +++ b/tools/xl/xl_parse.c
 @@ -2120,6 +2120,17 @@ skip_usbdev:
->>>>>>> upstream/stable-9
      }
  
  

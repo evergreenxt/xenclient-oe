@@ -36,11 +36,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_create.c
 +++ b/tools/libxl/libxl_create.c
-<<<<<<< HEAD
-@@ -954,6 +954,12 @@ static void initiate_domain_create(libxl
-=======
 @@ -995,6 +995,12 @@ static void initiate_domain_create(libxl
->>>>>>> upstream/stable-9
      dcs->sdss.dm.guest_domid = 0; /* means we haven't spawned */
  
      /*

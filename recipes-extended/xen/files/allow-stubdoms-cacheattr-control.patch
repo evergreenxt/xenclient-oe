@@ -72,25 +72,9 @@ through devices.
 ################################################################################
 PATCHES
 ################################################################################
-<<<<<<< HEAD
---- a/xen/include/xsm/dummy.h
-+++ b/xen/include/xsm/dummy.h
-@@ -127,6 +127,7 @@ static XSM_INLINE int xsm_domctl(XSM_DEF
-     case XEN_DOMCTL_memory_mapping:
-     case XEN_DOMCTL_bind_pt_irq:
-     case XEN_DOMCTL_unbind_pt_irq:
-+    case XEN_DOMCTL_pin_mem_cacheattr:
-         return xsm_default_action(XSM_DM_PRIV, current->domain, d);
-     case XEN_DOMCTL_getdomaininfo:
-         return xsm_default_action(XSM_XS_PRIV, current->domain, d);
---- a/xen/arch/x86/hvm/mtrr.c
-+++ b/xen/arch/x86/hvm/mtrr.c
-@@ -798,12 +798,6 @@ int epte_get_entry_emt(struct domain *d,
-=======
 --- a/xen/arch/x86/hvm/mtrr.c
 +++ b/xen/arch/x86/hvm/mtrr.c
 @@ -803,12 +803,6 @@ int epte_get_entry_emt(struct domain *d,
->>>>>>> upstream/stable-9
          return MTRR_TYPE_UNCACHABLE;
      }
  

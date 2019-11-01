@@ -36,13 +36,8 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
-<<<<<<< HEAD
-@@ -1815,6 +1815,32 @@ out:
-     return AO_CREATE_FAIL(rc);
-=======
 @@ -2123,6 +2123,32 @@ void libxl__device_list_free(const struc
      free(list);
->>>>>>> upstream/stable-9
  }
  
 +int libxl__wait_for_backend_device(libxl__gc *gc, const char *be_path,
@@ -76,11 +71,7 @@ PATCHES
   * mode: C
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
-<<<<<<< HEAD
-@@ -1225,6 +1225,8 @@ _hidden int libxl__parse_backend_path(li
-=======
 @@ -1249,6 +1249,8 @@ _hidden int libxl__parse_backend_path(li
->>>>>>> upstream/stable-9
  _hidden int libxl__device_destroy(libxl__gc *gc, libxl__device *dev);
  _hidden int libxl__wait_for_backend(libxl__gc *gc, const char *be_path,
                                      const char *state);
@@ -91,11 +82,7 @@ PATCHES
  _hidden int libxl__init_console_from_channel(libxl__gc *gc,
 --- a/tools/libxl/libxl_pci.c
 +++ b/tools/libxl/libxl_pci.c
-<<<<<<< HEAD
-@@ -157,10 +157,13 @@ static int libxl__device_pci_add_xenstor
-=======
 @@ -158,11 +158,14 @@ static int libxl__device_pci_add_xenstor
->>>>>>> upstream/stable-9
          goto out;
      }
  

@@ -29,11 +29,7 @@ PATCHES
 ################################################################################
 --- a/tools/libxl/libxl.h
 +++ b/tools/libxl/libxl.h
-<<<<<<< HEAD
-@@ -1809,6 +1809,9 @@ libxl_device_usbdev_list(libxl_ctx *ctx,
-=======
 @@ -1924,6 +1924,9 @@ libxl_device_usbdev_list(libxl_ctx *ctx,
->>>>>>> upstream/stable-9
  
  void libxl_device_usbdev_list_free(libxl_device_usbdev *list, int nr);
  
@@ -64,18 +60,6 @@ PATCHES
  char *libxl__blktap_devpath(libxl__gc *gc,
                              const char *disk,
                              libxl_disk_format format)
-<<<<<<< HEAD
-@@ -51,7 +63,7 @@ char *libxl__blktap_devpath(libxl__gc *g
-     return NULL;
- }
- 
--static bool tapdev_is_shared(libxl__gc *gc, const char *params)
-+bool tapdev_is_shared(libxl__gc *gc, const char *params)
- {
-     char **domids, **vbds;
-     char *tp;
-=======
->>>>>>> upstream/stable-9
 --- a/tools/libxl/libxl_device.c
 +++ b/tools/libxl/libxl_device.c
 @@ -18,7 +18,7 @@
@@ -89,11 +73,7 @@ PATCHES
  
 --- a/tools/libxl/libxl_disk.c
 +++ b/tools/libxl/libxl_disk.c
-<<<<<<< HEAD
-@@ -732,25 +732,139 @@ int libxl_device_disk_getinfo(libxl_ctx
-=======
 @@ -666,25 +666,138 @@ int libxl_device_disk_getinfo(libxl_ctx
->>>>>>> upstream/stable-9
      return rc;
  }
  
@@ -388,26 +368,15 @@ PATCHES
  
 --- a/tools/libxl/libxl_internal.h
 +++ b/tools/libxl/libxl_internal.h
-<<<<<<< HEAD
-@@ -1219,6 +1219,7 @@ _hidden int libxl__device_exists(libxl__
-=======
 @@ -1235,6 +1235,7 @@ _hidden int libxl__device_exists(libxl__
                                   libxl__device *device);
->>>>>>> upstream/stable-9
  _hidden int libxl__device_generic_add(libxl__gc *gc, xs_transaction_t t,
          libxl__device *device, char **bents, char **fents, char **ro_fents);
 +_hidden char *libxl__device_frontend_path(libxl__gc *gc, libxl__device *device);
-<<<<<<< HEAD
- _hidden char *libxl__device_libxl_path(libxl__gc *gc, libxl__device *device);
- _hidden int libxl__parse_backend_path(libxl__gc *gc, const char *path,
-                                       libxl__device *dev);
-@@ -1765,6 +1766,9 @@ _hidden char *libxl__blktap_devpath(libx
-=======
  _hidden char *libxl__domain_device_frontend_path(libxl__gc *gc, uint32_t domid, uint32_t devid,
                                                   libxl__device_kind device_kind);
  _hidden char *libxl__device_backend_path(libxl__gc *gc, libxl__device *device);
 @@ -1780,6 +1781,8 @@ _hidden char *libxl__blktap_devpath(libx
->>>>>>> upstream/stable-9
                                      const char *disk,
                                      libxl_disk_format format);
  
@@ -416,11 +385,7 @@ PATCHES
  /* libxl__device_destroy_tapdisk:
   *   Destroys any tapdisk process associated with the backend represented
   *   by be_path.
-<<<<<<< HEAD
-@@ -1836,6 +1840,7 @@ _hidden int libxl__qmp_restore(libxl__gc
-=======
 @@ -1848,6 +1851,7 @@ _hidden int libxl__qmp_restore(libxl__gc
->>>>>>> upstream/stable-9
  /* Set dirty bitmap logging status */
  _hidden int libxl__qmp_set_global_dirty_log(libxl__gc *gc, int domid, bool enable);
  _hidden int libxl__qmp_insert_cdrom(libxl__gc *gc, int domid, const libxl_device_disk *disk);
@@ -430,11 +395,7 @@ PATCHES
  /* Query the bitmap of CPUs */
 --- a/tools/libxl/libxl_qmp.c
 +++ b/tools/libxl/libxl_qmp.c
-<<<<<<< HEAD
-@@ -975,6 +975,17 @@ int libxl__qmp_set_global_dirty_log(libx
-=======
 @@ -1016,6 +1016,17 @@ int libxl__qmp_set_global_dirty_log(libx
->>>>>>> upstream/stable-9
                             NULL, NULL);
  }
  
@@ -452,8 +413,6 @@ PATCHES
  int libxl__qmp_insert_cdrom(libxl__gc *gc, int domid,
                              const libxl_device_disk *disk)
  {
-<<<<<<< HEAD
-=======
 @@ -1025,6 +1036,7 @@ int libxl__qmp_insert_cdrom(libxl__gc *g
      QMP_PARAMETERS_SPRINTF(&args, "device", "ide-%i", dev_number);
  
@@ -462,7 +421,6 @@ PATCHES
          return qmp_run_command(gc, domid, "eject", args, NULL, NULL);
      } else {
          qmp_parameters_add_string(gc, &args, "target", disk->pdev_path);
->>>>>>> upstream/stable-9
 --- a/tools/libxl/libxl_utils.c
 +++ b/tools/libxl/libxl_utils.c
 @@ -1383,6 +1383,12 @@ int libxl__random_bytes(libxl__gc *gc, u
@@ -480,11 +438,7 @@ PATCHES
   * mode: C
 --- a/tools/libxl/libxl_utils.h
 +++ b/tools/libxl/libxl_utils.h
-<<<<<<< HEAD
-@@ -170,6 +170,8 @@ int libxl_cpumap_to_nodemap(libxl_ctx *c
-=======
 @@ -174,6 +174,8 @@ int libxl_cpumap_to_nodemap(libxl_ctx *c
->>>>>>> upstream/stable-9
                              const libxl_bitmap *cpumap,
                              libxl_bitmap *nodemap);
  

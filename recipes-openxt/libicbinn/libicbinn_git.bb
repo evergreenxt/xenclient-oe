@@ -8,14 +8,8 @@ SRCREV = "${AUTOREV}"
 SRC_URI = "git://${OPENXT_GIT_MIRROR}/icbinn.git;protocol=${OPENXT_GIT_PROTOCOL};branch=${OPENXT_BRANCH}"
 SRC_URI += "file://icbinn_svc.initscript"
 
-<<<<<<< HEAD
-DEPENDS = "libv4v libtirpc xenclient-idl xenclient-rpcgen-native libxcdbus"
-EXTRA_OECONF += "--with-idldir=${STAGING_IDLDIR} --with-v4v --with-xcdbus"
-EXTRA_OECONF += "--with-rpcgen-templates=${STAGING_DATADIR_NATIVE}/xc-rpcgen-1.0/templates"
-=======
 DEPENDS = "libv4v libtirpc libxcdbus"
 EXTRA_OECONF += "--with-v4v --with-xcdbus"
->>>>>>> upstream/stable-8
 
 PACKAGES =+ "${PN}-server"
 FILES_${PN}-server = "${sysconfdir}/init.d ${bindir}/icbinn_svc"
