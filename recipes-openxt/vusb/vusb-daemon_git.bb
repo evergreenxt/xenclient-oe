@@ -14,7 +14,6 @@ SRC_URI = "git://${OPENXT_GIT_MIRROR}/vusb-daemon.git;protocol=${OPENXT_GIT_PROT
 # workaround for broken configure.in
 EXTRA_OECONF += "--with-libexpat=${STAGING_LIBDIR}"
 EXTRA_OECONF += "--with-libxenstore=${STAGING_LIBDIR}"
-EXTRA_OECONF += "--with-rpcgen-templates=${STAGING_DATADIR_NATIVE}/xc-rpcgen-1.0/templates"
 
 S = "${WORKDIR}/git"
 
