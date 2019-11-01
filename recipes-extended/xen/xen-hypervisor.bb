@@ -67,8 +67,8 @@ EXTRA_OEMAKE += " \
 
 do_configure() {
 
-    echo "debug := n" > .config	
-    echo "XSM_ENABLE := y" >> .config	
+    echo "debug := n" > .config
+    echo "XSM_ENABLE := y" >> .config
     echo "FLASK_ENABLE := y" >> .config
 
     cp "${WORKDIR}/defconfig" "${B}/xen/.config"

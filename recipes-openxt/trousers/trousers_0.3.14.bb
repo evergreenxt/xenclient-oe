@@ -22,9 +22,9 @@ CFLAGS_append = " -Wno-error=unused-parameter -Wno-error=strict-aliasing -std=gn
 inherit update-rc.d useradd autotools-brokensep pkgconfig
 
 
-INITSCRIPT_PACKAGES = "${PN}"	
+INITSCRIPT_PACKAGES = "${PN}"
 
-INITSCRIPT_NAME_${PN} = "trousers"	
+INITSCRIPT_NAME_${PN} = "trousers"
 INITSCRIPT_PARAMS_${PN} = "defaults 85"
 
 USERADD_PACKAGES = "${PN}"
