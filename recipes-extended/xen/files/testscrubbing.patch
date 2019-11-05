@@ -1,0 +1,12 @@
+diff --git a/xen/common/page_alloc.c b/xen/common/page_alloc.c
+index 41a23cd..24988bd 100644
+--- a/xen/common/page_alloc.c
++++ b/xen/common/page_alloc.c
+@@ -1948,6 +1948,7 @@ static void __init scrub_heap_pages(void)
+         cpumask_copy(&region[i].cpus, &node_cpus);
+     }
+ 
++    process_pending_softirqs();
+     printk("Scrubbing Free RAM on %d nodes using %d CPUs\n", num_online_nodes(),
+            cpumask_weight(&all_worker_cpus));
+ 
