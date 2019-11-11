@@ -94,7 +94,7 @@ SRC_URI_append = " \
     file://efi-require-shim.patch \
     file://tboot-measure-and-launch-from-xen-efi.patch \
     file://efi-load-options-no-default-image-name.patch \
-    file://testscrubbing.patch \
+    file://testallwritedom0.patch \
     file://argo-suppress-debug-messages.patch \
     file://argo-add-viptables.patch \
     file://argo-fix-full-ring-write-bug.patch \

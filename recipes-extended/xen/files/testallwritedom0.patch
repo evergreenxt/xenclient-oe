@@ -1,0 +1,13 @@
+diff --git a/xen/drivers/passthrough/iommu.c b/xen/drivers/passthrough/iommu.c
+index 04b0be3..b333b94 100644
+--- a/xen/drivers/passthrough/iommu.c
++++ b/xen/drivers/passthrough/iommu.c
+@@ -191,7 +191,7 @@ void __hwdom_init iommu_hwdom_init(struct domain *d)
+         {
+             unsigned long mfn = mfn_x(page_to_mfn(page));
+             unsigned long gfn = mfn_to_gmfn(d, mfn);
+-            unsigned int mapping = IOMMUF_readable;
++            unsigned int mapping = IOMMUF_readable | IOMMUF_writable;
+             int ret;
+ 
+             if ( ((page->u.inuse.type_info & PGT_count_mask) == 0) ||
