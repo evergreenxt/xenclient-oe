@@ -9,14 +9,8 @@ SRC_URI = "git://github.com/tianocore/edk2.git;branch=master \
 SRCREV="dd4cae4d82c7477273f3da455084844db5cca0c0"
 
 # PREBOOT.EXE, OS independent, latest version (currently 24.2).
-<<<<<<< HEAD
-SRC_URI[PREBOOT.md5sum] = "f4923fec9d8ec3e6da0e35e0b4eb0a53"
-SRC_URI[PREBOOT.sha256sum] = "0dab6aec9d2b49cfbf4f5b1c663632ee217c721ce4c4183f9865dd9ecf2cfa34"
-#SRC_URI[PREBOOT.sha256sum] = "090137bc8af0b05c1ae2b27b8b7851d295cb1225880fb4657c7ddc470b261485"
-=======
 SRC_URI[PREBOOT.md5sum] = "f01a69fdf39511d47a1ba2860ef177c1"
 SRC_URI[PREBOOT.sha256sum] = "090137bc8af0b05c1ae2b27b8b7851d295cb1225880fb4657c7ddc470b261485"
->>>>>>> 597bf64d5e8e9e819ca8bdcf86b3482bd349ee23
 
 FILES_${PN} += "\
     /usr/share/firmware/ovmf.bin \
